@@ -1,9 +1,10 @@
-import { addDoc, collection, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot, writeBatch } from "firebase/firestore";
 
-import type { Gonggu, User } from "../../types/domain";
+import type { Gonggu, Settlement, User } from "../../types/domain";
 import { getFirebaseServices } from "./client";
 
 const GONGGUS = "gonggus";
+const SETTLEMENTS = "settlements";
 
 /**
  * gonggus 컬렉션 실시간 구독 (mock → Firebase 전환 2단계).
@@ -34,16 +35,21 @@ export type CreateGongguInput = {
 };
 
 /**
- * 새 공구를 Firestore 에 생성하고 문서 id 를 돌려준다.
- * Firestore rules: gonggus create = 로그인 사용자 허용 (참여/정산/후기는 서버 함수 전용).
+ * 새 공구 + 정산 문서를 함께 생성하고 공구 문서 id 를 돌려준다.
+ * 정산 1인 금액 = ceil(총액 / 목표 인원) (단순 계산).
  */
 export async function createGongguDoc(input: CreateGongguInput, host: User): Promise<string> {
   const services = getFirebaseServices();
   if (!services) {
     throw new Error("Firebase가 설정되지 않았습니다.");
   }
+  const { db } = services;
 
-  const data: Omit<Gonggu, "id"> = {
+  const gongguRef = doc(collection(db, GONGGUS));
+  const settlementId = `settlement_${gongguRef.id}`;
+  const pricePerPerson = Math.ceil(input.totalPrice / input.targetParticipants);
+
+  const gonggu: Omit<Gonggu, "id"> = {
     title: input.title,
     description: "참여자와 픽업 시간을 조율하세요.",
     category: "기타",
@@ -62,9 +68,24 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     status: "recruiting",
     imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e",
     receiptVerified: false,
-    settlementId: ""
+    settlementId
   };
 
-  const ref = await addDoc(collection(services.db, GONGGUS), data);
-  return ref.id;
+  const settlement: Omit<Settlement, "id"> = {
+    gongguId: gongguRef.id,
+    hostUserId: host.id,
+    totalAmount: input.totalPrice,
+    pricePerPerson,
+    participantCount: input.targetParticipants,
+    mode: "mock",
+    status: "pending",
+    releaseCondition: "all_pickup_confirmed_and_reviews_completed"
+  };
+
+  const batch = writeBatch(db);
+  batch.set(gongguRef, gonggu);
+  batch.set(doc(db, SETTLEMENTS, settlementId), settlement);
+  await batch.commit();
+
+  return gongguRef.id;
 }
