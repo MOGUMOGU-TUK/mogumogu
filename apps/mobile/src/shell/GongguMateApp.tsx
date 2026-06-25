@@ -29,7 +29,7 @@ import {
 } from "../services/mock/mockRepository";
 import { getFirebaseServices, isFirebaseConfigured } from "../services/firebase/client";
 import { createGongguDoc } from "../services/firebase/gongguRepository";
-import { useFirebaseAuth, type AuthStatus } from "../features/auth/useFirebaseAuth";
+import { useFirebaseAuth, type AuthStatus, type AuthUser } from "../features/auth/useFirebaseAuth";
 import { useGonggus, type GongguSource } from "../features/gonggu/useGonggus";
 import { seedSnapshot } from "../services/mock/seed";
 import type { AppSnapshot, Gonggu, Settlement } from "../types/domain";
@@ -57,6 +57,15 @@ export function GongguMateApp() {
       void auth.signIn();
     }
   }, [auth.status]);
+
+  // Google 등 실제 계정으로 로그인돼 있으면(세션 복원 포함) 로그인 화면을 건너뛰고 바로 진입.
+  // 익명 세션은 배경용이므로 자동 진입시키지 않는다.
+  useEffect(() => {
+    if (screen === "login" && auth.user && !auth.user.isAnonymous) {
+      setIsLoggedIn(true);
+      setScreen(currentUser.locationVerified ? "home" : "location");
+    }
+  }, [auth.user, screen, currentUser.locationVerified]);
 
   // 2단계: Firestore 공구 리스트를 snapshot.gonggus 에 동기화한다.
   // (참여/정산/후기 등 로컬 상태는 별도 필드라 덮어쓰이지 않는다)
@@ -133,9 +142,10 @@ export function GongguMateApp() {
           <LoginScreen
             firebaseConfigured={firebaseConfigured}
             authStatus={auth.status}
-            uid={auth.uid}
+            user={auth.user}
             authError={auth.error}
-            onLogin={login}
+            onGoogleLogin={() => void auth.signInGoogle()}
+            onGuestLogin={login}
           />
         ) : screen === "location" ? (
           <LocationScreen userName={currentUser.nickname} onVerify={verifyLocation} />
@@ -210,18 +220,20 @@ export function GongguMateApp() {
 function LoginScreen({
   firebaseConfigured,
   authStatus,
-  uid,
+  user,
   authError,
-  onLogin
+  onGoogleLogin,
+  onGuestLogin
 }: {
   firebaseConfigured: boolean;
   authStatus: AuthStatus;
-  uid: string | null;
+  user: AuthUser | null;
   authError: string | null;
-  onLogin: () => void;
+  onGoogleLogin: () => void;
+  onGuestLogin: () => void;
 }) {
   const projectId = getFirebaseServices()?.app.options.projectId ?? "미설정";
-  const connected = authStatus === "signed_in";
+  const signedInReal = Boolean(user && !user.isAnonymous);
 
   return (
     <View style={styles.login}>
@@ -235,38 +247,42 @@ function LoginScreen({
       <View style={styles.loginPanel}>
         <View style={styles.rowBetween}>
           <Text style={styles.panelTitle}>로그인</Text>
-          <Text style={connected ? styles.connectedBadge : styles.offlineBadge}>
-            {connected
-              ? `Firebase ${projectId} · 연결됨`
-              : firebaseConfigured
-                ? `Firebase ${projectId}`
-                : "Firebase 미설정"}
+          <Text style={signedInReal ? styles.connectedBadge : styles.offlineBadge}>
+            {firebaseConfigured
+              ? signedInReal
+                ? `Firebase ${projectId} · 로그인됨`
+                : `Firebase ${projectId}`
+              : "Firebase 미설정"}
           </Text>
         </View>
-        <Text style={styles.bodyText}>{loginStatusText(authStatus, uid, authError)}</Text>
+        <Text style={styles.bodyText}>{loginStatusText(authStatus, user, authError)}</Text>
         <PrimaryButton
-          label={authStatus === "loading" ? "익명 연결 중…" : "민준으로 시작하기"}
-          onPress={onLogin}
+          label={authStatus === "loading" ? "로그인 중…" : "Google로 로그인"}
+          onPress={onGoogleLogin}
         />
-        <SecondaryButton label="Google 로그인 자리" onPress={onLogin} />
+        <SecondaryButton label="게스트로 둘러보기" onPress={onGuestLogin} />
       </View>
     </View>
   );
 }
 
-function loginStatusText(status: AuthStatus, uid: string | null, error: string | null): string {
+function loginStatusText(status: AuthStatus, user: AuthUser | null, error: string | null): string {
+  if (error) {
+    return error;
+  }
+  if (user && !user.isAnonymous) {
+    return `${user.displayName ?? user.email ?? "사용자"}님으로 로그인됨 · 잠시 후 자동 입장합니다.`;
+  }
   switch (status) {
-    case "signed_in":
-      return `익명 인증 완료 · UID ${uid?.slice(0, 8) ?? ""}… (Firestore 연동 준비됨)`;
     case "loading":
-      return "Firebase 익명 인증을 진행하고 있습니다…";
-    case "error":
-      return error ?? "익명 로그인에 실패했습니다.";
+      return "로그인을 진행하고 있습니다…";
+    case "signed_in":
+      return "익명 세션 연결됨 (데이터 읽기용). Google로 로그인하거나 게스트로 둘러볼 수 있어요.";
     case "disabled":
-      return "현재 mock 계정으로 화면 흐름을 유지합니다. (.env 설정 시 Firebase 익명 인증이 켜집니다)";
+      return "현재 mock 데이터로 동작합니다. (.env 설정 시 Firebase 로그인이 활성화됩니다)";
     case "signed_out":
     default:
-      return "Firebase 익명 인증을 준비하고 있습니다.";
+      return "Firebase 로그인을 준비하고 있습니다.";
   }
 }
 
