@@ -1,0 +1,10 @@
+node_modules/
+dist/
+lib/
+.expo/
+.firebase/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log

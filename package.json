@@ -1,0 +1,15 @@
+{
+  "name": "mogumogu",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix apps/mobile run start",
+    "ios": "npm --prefix apps/mobile run ios",
+    "web": "npm --prefix apps/mobile run web",
+    "typecheck": "npm --prefix apps/mobile run typecheck",
+    "test": "npm --prefix apps/mobile run test",
+    "export:web": "npm --prefix apps/mobile exec -- expo export --platform web --output-dir dist",
+    "functions:build": "npm --prefix firebase/functions run build",
+    "functions:serve": "npm --prefix firebase/functions run serve"
+  }
+}

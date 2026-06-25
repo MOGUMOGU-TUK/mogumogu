@@ -1,0 +1,24 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "gonggus",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pickupGeoHash",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recruitmentDeadline",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
+

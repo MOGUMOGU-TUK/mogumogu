@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    match /userPrivate/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /gonggus/{gongguId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
+
+      match /participants/{userId} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+
+      match /images/{imageId} {
+        allow read: if signedIn();
+        allow write: if signedIn();
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read: if signedIn();
+      allow write: if false;
+
+      match /messages/{messageId} {
+        allow read: if signedIn();
+        allow create: if signedIn();
+        allow update, delete: if false;
+      }
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /settlements/{settlementId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /reports/{reportId} {
+      allow create: if signedIn();
+      allow read, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

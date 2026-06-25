@@ -1,0 +1,60 @@
+openapi: 3.1.0
+info:
+  title: mogumogu API
+  version: 0.1.0
+servers:
+  - url: https://api.mogumogu.example
+paths:
+  /v1/gonggus/nearby:
+    get:
+      summary: Get nearby gonggus
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: radiusMeters
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1000
+      responses:
+        "200":
+          description: Nearby gonggu list
+  /v1/gonggus/{gongguId}/join:
+    post:
+      summary: Join a gonggu
+      parameters:
+        - name: gongguId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Joined
+  /v1/gonggus/{gongguId}/pickup-confirmations:
+    post:
+      summary: Confirm pickup
+      parameters:
+        - name: gongguId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pickup confirmed
+  /v1/reviews:
+    post:
+      summary: Submit required review
+      responses:
+        "200":
+          description: Review submitted
