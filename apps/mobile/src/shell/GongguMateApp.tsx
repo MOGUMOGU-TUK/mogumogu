@@ -28,6 +28,7 @@ import {
   submitReview
 } from "../services/mock/mockRepository";
 import { getFirebaseServices, isFirebaseConfigured } from "../services/firebase/client";
+import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { createGongguDoc } from "../services/firebase/gongguRepository";
 import {
   cancelParticipationDoc,
@@ -36,6 +37,7 @@ import {
   submitReviewDoc
 } from "../services/firebase/participationRepository";
 import { useFirebaseAuth, type AuthStatus, type AuthUser } from "../features/auth/useFirebaseAuth";
+import { useChatMessages } from "../features/chat/useChatMessages";
 import { useFirestoreData, type GongguSource } from "../features/data/useFirestoreData";
 import { seedSnapshot } from "../services/mock/seed";
 import type { AppSnapshot, Gonggu, Settlement } from "../types/domain";
@@ -155,6 +157,14 @@ export function GongguMateApp() {
     }
   }
 
+  function handleSendMessage(gonggu: Gonggu, text: string) {
+    if (firebaseConfigured) {
+      runWrite(() => sendMessageDoc(gonggu.id, currentUser, text), "메시지 전송 실패");
+    } else {
+      setSnapshot((prev) => sendMessage(prev, gonggu.id, currentUser, text));
+    }
+  }
+
   function verifyLocation() {
     setSnapshot((prev) => ({
       ...prev,
@@ -242,7 +252,7 @@ export function GongguMateApp() {
                 snapshot={snapshot}
                 gonggu={selectedGonggu}
                 currentUserId={currentUser.id}
-                onSend={(text) => setSnapshot((prev) => sendMessage(prev, selectedGonggu.id, currentUser, text))}
+                onSend={(text) => handleSendMessage(selectedGonggu, text)}
               />
             )}
             {selectedGonggu && screen === "settlement" && (
@@ -600,7 +610,8 @@ function ChatScreen({
   onSend: (text: string) => void;
 }) {
   const [text, setText] = useState("");
-  const messages = snapshot.messages.filter((message) => message.gongguId === gonggu.id);
+  const liveMessages = useChatMessages(gonggu.id);
+  const messages = liveMessages ?? snapshot.messages.filter((message) => message.gongguId === gonggu.id);
 
   return (
     <View style={styles.flex}>

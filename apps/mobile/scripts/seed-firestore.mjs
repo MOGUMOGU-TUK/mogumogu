@@ -116,8 +116,44 @@ async function seedDocs(collectionName, items) {
   }
 }
 
+// 채팅 메시지 (chats/{gongguId}/messages) — 데모용 초기 메시지.
+const chatMessages = {
+  gonggu_1: [
+    {
+      id: "msg_1",
+      gongguId: "gonggu_1",
+      senderId: "system",
+      senderName: "mogumogu",
+      text: "공구방이 열렸습니다. 픽업 시간과 소분 방식을 확인해주세요.",
+      messageType: "system",
+      createdAt: "2026-06-24T06:00:00.000Z"
+    },
+    {
+      id: "msg_2",
+      gongguId: "gonggu_1",
+      senderId: "host_1",
+      senderName: "소분장인",
+      text: "베이글은 위생장갑 끼고 4개씩 나눠둘게요.",
+      messageType: "user",
+      createdAt: "2026-06-24T06:01:00.000Z"
+    }
+  ]
+};
+
 await seedDocs("gonggus", gonggus);
 await seedDocs("settlements", settlements);
+
+for (const [gongguId, messages] of Object.entries(chatMessages)) {
+  for (const { id, ...data } of messages) {
+    const ref = doc(db, "chats", gongguId, "messages", id);
+    if ((await getDoc(ref)).exists()) {
+      console.log(`skip  chats/${gongguId}/messages/${id} (이미 존재)`);
+      continue;
+    }
+    await setDoc(ref, data);
+    console.log(`seed  chats/${gongguId}/messages/${id}`);
+  }
+}
 
 console.log("done");
 process.exit(0);
