@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -233,6 +234,7 @@ function gradientColor(stops: string[], ratio: number) {
 /* ------------------------------------------------------------------ */
 
 export function GongguMateApp() {
+  const insets = useSafeAreaInsets();
   const [screen, setScreen] = useState<Screen>("login");
   const [tab, setTab] = useState<MainTab>("home");
   const [selectedId, setSelectedId] = useState("");
@@ -268,7 +270,7 @@ export function GongguMateApp() {
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
-  const data = useFirestoreData();
+  const data = useFirestoreData(!!auth.user);
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
@@ -306,7 +308,7 @@ export function GongguMateApp() {
   );
 
   /* 채팅 실시간 구독 */
-  const liveMessages = useChatMessages(selectedId);
+  const liveMessages = useChatMessages(selectedId, !!auth.user);
   const chatMsgs: ChatMsg[] = useMemo(
     () =>
       liveMessages
@@ -337,6 +339,19 @@ export function GongguMateApp() {
     if (nextTab) setTab(nextTab);
     setShowJoin(false);
   }
+
+  /* Android 물리 뒤로가기 버튼 */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (showJoin) { setShowJoin(false); return true; }
+      if (screen === "verify") { setScreen("login"); return true; }
+      if (screen === "detail" || screen === "create" || screen === "review") { go(tab); return true; }
+      if (screen === "chat") { go(tab); return true; }
+      if (screen === "map" || screen === "mypage") { go("home", "home"); return true; }
+      return false; // login / home → 시스템이 처리 (앱 종료)
+    });
+    return () => sub.remove();
+  }, [screen, tab, showJoin]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -428,7 +443,7 @@ export function GongguMateApp() {
         style={styles.flex}
       >
         <View style={styles.root}>
-          <View style={styles.body}>
+          <View style={[styles.body, !showNav && { paddingBottom: insets.bottom }]}>
             {screen === "login" && (
               <LoginScreen
                 auth={auth}
@@ -721,6 +736,192 @@ function GoogleGIcon({ size = 22 }: { size?: number }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Nav vector icons                                                    */
+/* ------------------------------------------------------------------ */
+
+function HomeIcon({ size = 22, color = t.dim }: { size?: number; color?: string }) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center" }}>
+      {/* 지붕 삼각형 */}
+      <View
+        style={{
+          width: 0, height: 0,
+          borderLeftWidth: s * 0.5, borderRightWidth: s * 0.5,
+          borderBottomWidth: s * 0.47,
+          borderLeftColor: "transparent", borderRightColor: "transparent",
+          borderBottomColor: color
+        }}
+      />
+      {/* 벽 */}
+      <View
+        style={{
+          width: s * 0.64, height: s * 0.42,
+          backgroundColor: color, marginTop: -s * 0.03,
+          borderBottomLeftRadius: 2, borderBottomRightRadius: 2
+        }}
+      />
+    </View>
+  );
+}
+
+function MapPinIcon({ size = 22, color = t.dim }: { size?: number; color?: string }) {
+  const s = size;
+  const d = s * 0.58;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center", paddingTop: s * 0.02 }}>
+      {/* 원형 상단 */}
+      <View style={{ width: d, height: d, borderRadius: d / 2, backgroundColor: color, alignItems: "center", justifyContent: "center" }}>
+        {/* 가운데 흰 점 */}
+        <View style={{ width: d * 0.36, height: d * 0.36, borderRadius: d * 0.18, backgroundColor: "rgba(255,255,255,0.9)" }} />
+      </View>
+      {/* 뾰족한 아래쪽 */}
+      <View
+        style={{
+          width: 0, height: 0, marginTop: -s * 0.05,
+          borderLeftWidth: s * 0.2, borderRightWidth: s * 0.2,
+          borderTopWidth: s * 0.34,
+          borderLeftColor: "transparent", borderRightColor: "transparent",
+          borderTopColor: color
+        }}
+      />
+    </View>
+  );
+}
+
+function ChatBubbleIcon({ size = 22, color = t.dim }: { size?: number; color?: string }) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s }}>
+      {/* 말풍선 몸체 */}
+      <View
+        style={{
+          position: "absolute", top: 0, left: 0, right: 0,
+          height: s * 0.76, backgroundColor: color, borderRadius: s * 0.18
+        }}
+      />
+      {/* 꼬리 (삼각형) */}
+      <View
+        style={{
+          position: "absolute", bottom: 0, left: s * 0.14,
+          width: 0, height: 0,
+          borderRightWidth: s * 0.18, borderTopWidth: s * 0.28,
+          borderRightColor: "transparent", borderTopColor: color
+        }}
+      />
+    </View>
+  );
+}
+
+function PersonIcon({ size = 22, color = t.dim }: { size?: number; color?: string }) {
+  const s = size;
+  const headD = s * 0.44;
+  const bodyW = s * 0.74;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center" }}>
+      {/* 머리 */}
+      <View style={{ width: headD, height: headD, borderRadius: headD / 2, backgroundColor: color, marginBottom: s * 0.04 }} />
+      {/* 어깨/몸 반원 */}
+      <View
+        style={{
+          width: bodyW, height: s * 0.38, backgroundColor: color,
+          borderTopLeftRadius: bodyW / 2, borderTopRightRadius: bodyW / 2
+        }}
+      />
+    </View>
+  );
+}
+
+function SearchIcon({ size = 20, color = t.ink }: { size?: number; color?: string }) {
+  const s = size;
+  const bw = Math.max(1.5, s * 0.1);
+  // 렌즈를 크게, 세로 중앙 정렬을 위해 살짝 아래 오프셋
+  const offset = s * 0.06;
+  const lD = s * 0.70;
+  const lR = lD / 2;
+  const lCx = offset + lR;
+  const lCy = offset + lR;
+  // 렌즈 외곽 45° edge
+  const ex = lCx + lR * 0.707;
+  const ey = lCy + lR * 0.707;
+  // 손잡이: 짧게 끊음
+  const endPt = s * 0.92;
+  const hCx = (ex + endPt) / 2;
+  const hCy = (ey + endPt) / 2;
+  const hLen = (endPt - ex) * Math.SQRT2;
+  return (
+    <View style={{ width: s, height: s }}>
+      <View style={{
+        position: "absolute", top: offset, left: offset,
+        width: lD, height: lD, borderRadius: lR,
+        borderWidth: bw, borderColor: color
+      }} />
+      <View style={{
+        position: "absolute",
+        top: hCy - hLen / 2,
+        left: hCx - bw / 2,
+        width: bw, height: hLen,
+        backgroundColor: color, borderRadius: bw / 2,
+        transform: [{ rotate: "135deg" }]
+      }} />
+    </View>
+  );
+}
+
+function BellIcon({ size = 20, color = t.ink }: { size?: number; color?: string }) {
+  const s = size;
+  const bw = s * 0.74;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center" }}>
+      {/* 상단 고리 */}
+      <View style={{ width: s * 0.1, height: s * 0.14, backgroundColor: color, borderRadius: 2 }} />
+      {/* 벨 몸체 */}
+      <View
+        style={{
+          width: bw, height: s * 0.54, backgroundColor: color,
+          borderTopLeftRadius: bw / 2, borderTopRightRadius: bw / 2
+        }}
+      />
+      {/* 벨 하단 테두리 */}
+      <View style={{ width: s * 0.88, height: s * 0.13, backgroundColor: color, borderRadius: 2 }} />
+      {/* 추 */}
+      <View style={{ width: s * 0.2, height: s * 0.2, borderRadius: s * 0.1, backgroundColor: color }} />
+    </View>
+  );
+}
+
+function SendArrowIcon({ size = 16, color = "#fff" }: { size?: number; color?: string }) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          width: 0, height: 0,
+          borderTopWidth: s * 0.5, borderBottomWidth: s * 0.5,
+          borderLeftWidth: s * 0.88,
+          borderTopColor: "transparent", borderBottomColor: "transparent",
+          borderLeftColor: color
+        }}
+      />
+    </View>
+  );
+}
+
+function CameraIcon({ size = 22, color = t.dim }: { size?: number; color?: string }) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s * 0.82 }}>
+      {/* 카메라 몸체 */}
+      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: s * 0.62, backgroundColor: color, borderRadius: s * 0.12 }} />
+      {/* 렌즈 */}
+      <View style={{ position: "absolute", bottom: s * 0.13, left: "50%", marginLeft: -s * 0.175, width: s * 0.35, height: s * 0.35, borderRadius: s * 0.175, backgroundColor: "rgba(255,255,255,0.85)" }} />
+      {/* 상단 뷰파인더 범프 */}
+      <View style={{ position: "absolute", top: 0, left: "26%", width: s * 0.3, height: s * 0.2, backgroundColor: color, borderRadius: s * 0.06 }} />
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Login                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -766,7 +967,7 @@ function LoginScreen({
         </View>
       )}
 
-      <View style={{ gap: 11, paddingBottom: isSmall ? 8 : 14 }}>
+      <View style={{ gap: 11, paddingBottom: isSmall ? 20 : 26 }}>
         {/* 카카오 공식 버튼 */}
         <Pressable
           style={[styles.authButton, { backgroundColor: t.kakao, opacity: loading ? 0.6 : 1 }]}
@@ -870,7 +1071,10 @@ function VerifyScreen({
         <>
           <View style={styles.verifyCenter}>
             <View style={styles.locateCircle}>
-              <Text style={{ fontSize: 46 }}>{locating ? "⏳" : "📍"}</Text>
+              {locating
+                ? <Text style={{ fontSize: 13, fontWeight: "700", color: t.muted }}>위치 확인 중…</Text>
+                : <MapPinIcon size={44} color={t.rose} />
+              }
             </View>
             <Text style={[styles.verifyTitle, { textAlign: "center", marginTop: 18 }]}>
               {locating ? "위치 확인 중…" : "동네를 인증해주세요"}
@@ -945,10 +1149,14 @@ function HomeScreen({
           <Text style={styles.locText}>봉천동</Text>
           <Text style={styles.chevron}>⌄</Text>
         </Pressable>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-          <Text style={styles.headerIcon}>🔍</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+          <Pressable>
+            <SearchIcon size={20} color={t.ink} />
+          </Pressable>
           <View>
-            <Text style={styles.headerIcon}>🔔</Text>
+            <Pressable>
+              <BellIcon size={20} color={t.ink} />
+            </Pressable>
             <View style={styles.bellDot} />
           </View>
         </View>
@@ -999,7 +1207,7 @@ function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void }) {
           <Text style={styles.thumbTagText}>{deal.cat}</Text>
         </View>
       </View>
-      <View style={{ flex: 1, justifyContent: "space-between" }}>
+      <View style={{ flex: 1 }}>
         <View style={styles.rowBetween}>
           <View
             style={[
@@ -1023,7 +1231,7 @@ function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void }) {
           {deal.title}
         </Text>
         <Text style={styles.dealStore}>{deal.store}</Text>
-        <View>
+        <View style={{ marginTop: 6 }}>
           <View style={[styles.rowBetween, { marginBottom: 5 }]}>
             <Text style={styles.dealPrice}>1인 {fmt(per(deal))}</Text>
             <Text style={styles.dealMeta}>
@@ -1404,7 +1612,7 @@ function ChatScreen({
           />
         </View>
         <Pressable style={styles.sendButton} onPress={submit}>
-          <Text style={{ fontSize: 16, color: "#fff" }}>➤</Text>
+          <SendArrowIcon size={16} color="#fff" />
         </Pressable>
       </View>
     </View>
@@ -1458,7 +1666,7 @@ function CreateScreen({
           <Text style={styles.fieldLabel}>상품 사진</Text>
           <View style={{ flexDirection: "row", gap: 9, marginTop: 9 }}>
             <Pressable style={styles.photoAdd}>
-              <Text style={{ fontSize: 22 }}>📷</Text>
+              <CameraIcon size={22} color={t.dim} />
               <Text style={{ fontSize: 11, fontWeight: "600", color: t.dim }}>0/5</Text>
             </Pressable>
             <View style={[styles.photoThumb, { backgroundColor: "#EDDEE3" }]} />
@@ -1805,34 +2013,34 @@ function BottomNav({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 6) }]}>
-      <NavItem icon="🏠" label="홈" active={active === "home"} onPress={onHome} />
-      <NavItem icon="📍" label="지도" active={active === "map"} onPress={onMap} />
+    <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <NavItem iconNode={<HomeIcon size={22} color={active === "home" ? t.rose : t.dim} />} label="홈" active={active === "home"} onPress={onHome} />
+      <NavItem iconNode={<MapPinIcon size={22} color={active === "map" ? t.rose : t.dim} />} label="지도" active={active === "map"} onPress={onMap} />
       <Pressable style={styles.navCenter} onPress={onCreate}>
         <View style={styles.fab}>
-          <Text style={{ fontSize: 26, color: "#fff", fontWeight: "300", lineHeight: 28 }}>＋</Text>
+          <Text style={{ fontSize: 28, color: "#fff", fontWeight: "300", lineHeight: 30 }}>+</Text>
         </View>
       </Pressable>
-      <NavItem icon="💬" label="채팅" active={active === "chat"} onPress={onChat} />
-      <NavItem icon="👤" label="마이" active={active === "mypage"} onPress={onMy} />
+      <NavItem iconNode={<ChatBubbleIcon size={22} color={active === "chat" ? t.rose : t.dim} />} label="채팅" active={active === "chat"} onPress={onChat} />
+      <NavItem iconNode={<PersonIcon size={22} color={active === "mypage" ? t.rose : t.dim} />} label="마이" active={active === "mypage"} onPress={onMy} />
     </View>
   );
 }
 
 function NavItem({
-  icon,
+  iconNode,
   label,
   active,
   onPress
 }: {
-  icon: string;
+  iconNode: React.ReactNode;
   label: string;
   active: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable style={styles.navItem} onPress={onPress}>
-      <Text style={{ fontSize: 20, opacity: active ? 1 : 0.4 }}>{icon}</Text>
+      {iconNode}
       <Text style={{ fontSize: 10, fontWeight: "600", color: active ? t.rose : t.dim }}>{label}</Text>
     </Pressable>
   );
@@ -1977,8 +2185,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4
+    paddingTop: 14,
+    paddingBottom: 12
   },
   locButton: { flexDirection: "row", alignItems: "center", gap: 5 },
   locText: { fontSize: 19, fontWeight: "800", color: t.ink },
@@ -1993,15 +2201,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: t.rose
   },
-  chipScroll: { flexGrow: 0 },
-  chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
+  chipScroll: { flexShrink: 0 },
+  chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
   filterChip: {
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
     borderWidth: 1
   },
-  dealList: { gap: 11, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 24 },
+  dealList: { gap: 11, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 80 },
   dealCard: {
     backgroundColor: "#fff",
     borderRadius: 18,
@@ -2031,7 +2239,7 @@ const styles = StyleSheet.create({
   },
   thumbTagText: { fontSize: 10, fontWeight: "700", color: "rgba(0,0,0,0.34)" },
   deadlinePill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  dealTitle: { fontSize: 15, fontWeight: "700", color: t.ink, marginTop: 5, lineHeight: 20 },
+  dealTitle: { fontSize: 15, fontWeight: "700", color: t.ink, marginTop: 2, lineHeight: 20 },
   dealStore: { fontSize: 12, color: t.muted, marginTop: 1 },
   dealPrice: { fontSize: 15, fontWeight: "800", color: t.rose },
   dealMeta: { fontSize: 11, fontWeight: "600", color: t.chipInk },
@@ -2114,7 +2322,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 12,
     right: 12,
-    bottom: 14,
+    bottom: 12,
     backgroundColor: "#fff",
     borderRadius: 20,
     padding: 14,
@@ -2325,7 +2533,7 @@ const styles = StyleSheet.create({
   reviewHeadline: { fontSize: 18, fontWeight: "800", color: t.ink, marginTop: 12, textAlign: "center", lineHeight: 25 },
 
   /* mypage */
-  myBody: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
+  myBody: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 80 },
   myTitle: { fontSize: 20, fontWeight: "800", color: t.ink, paddingTop: 6, paddingBottom: 16 },
   profileCard: { backgroundColor: "#fff", borderRadius: 18, padding: 18 },
   profileAvatar: {
@@ -2385,7 +2593,7 @@ const styles = StyleSheet.create({
     backgroundColor: t.pink,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -18,
+    marginTop: -10,
     shadowColor: "#E73C64",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
