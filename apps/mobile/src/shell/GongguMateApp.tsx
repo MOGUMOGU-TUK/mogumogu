@@ -13,7 +13,17 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors } from "../shared/theme/colors";
+import { useFirebaseAuth, type UseFirebaseAuth } from "../features/auth/useFirebaseAuth";
+import { useChatMessages } from "../features/chat/useChatMessages";
+import { useFirestoreData } from "../features/data/useFirestoreData";
+import { sendMessageDoc } from "../services/firebase/chatRepository";
+import { isFirebaseConfigured } from "../services/firebase/client";
+import { createGongguDoc } from "../services/firebase/gongguRepository";
+import {
+  joinGongguDoc,
+  submitReviewDoc
+} from "../services/firebase/participationRepository";
+import type { ChatMessage, Gonggu, Review, User } from "../types/domain";
 
 /* ------------------------------------------------------------------ */
 /* Design tokens (모구모구.html 시안 기준)                              */
@@ -85,138 +95,71 @@ type Deal = {
   desc: string;
 };
 
-const DEALS: Deal[] = [
-  {
-    id: "d1",
-    cat: "베이커리",
-    title: "코스트코 크루아상 24개입",
-    store: "코스트코 양재점",
-    total: 16800,
-    cur: 4,
-    max: 6,
-    dist: "120m",
-    deadline: "2시간 뒤 마감",
-    urgent: true,
-    spot: "정문 CU 앞",
-    pickup: "오늘 저녁 7시",
-    leader: "민지",
-    temp: 38.2,
-    deals: 12,
-    reviews: 9,
-    noshow: 0,
-    tint: "#F3DEC4",
-    method: "1인 4개씩 소분",
-    desc: "코스트코 대용량 크루아상을 같이 나눠가져요. 냉동 보관하면 2주는 거뜬해요. 아침 대용으로 최고!"
-  },
-  {
-    id: "d2",
-    cat: "식품",
-    title: "노브랜드 생수 2L × 24병",
-    store: "노브랜드 신림점",
-    total: 8990,
-    cur: 3,
-    max: 4,
-    dist: "300m",
-    deadline: "5시간 뒤 마감",
-    urgent: false,
-    spot: "후문 버스정류장",
-    pickup: "오늘 밤 9시",
-    leader: "도현",
-    temp: 37.1,
-    deals: 7,
-    reviews: 5,
-    noshow: 0,
-    tint: "#CFE2EC",
-    method: "1인 6병씩",
-    desc: "기숙사 살면 물 사다 나르기 힘들죠. 차로 가져올 거라 같이 나눠요. 6병씩 가져가면 됩니다."
-  },
-  {
-    id: "d3",
-    cat: "간식",
-    title: "마라탕 재료 공구 (분모자·푸주)",
-    store: "동네마트 봉천",
-    total: 21000,
-    cur: 5,
-    max: 7,
-    dist: "80m",
-    deadline: "내일 오후 마감",
-    urgent: false,
-    spot: "학생회관 1층",
-    pickup: "내일 점심 12시",
-    leader: "서연",
-    temp: 39.5,
-    deals: 21,
-    reviews: 18,
-    noshow: 0,
-    tint: "#F0D2CE",
-    method: "재료별 1/N 소분",
-    desc: "집에서 마라탕 해먹을 재료 대량으로 떼와요. 분모자, 푸주, 건두부 다 들어있어요. 양 푸짐!"
-  },
-  {
-    id: "d4",
-    cat: "생필품",
-    title: "다이소 청소·정리템 대량",
-    store: "다이소 봉천점",
-    total: 12500,
-    cur: 2,
-    max: 5,
-    dist: "450m",
-    deadline: "8시간 뒤 마감",
-    urgent: false,
-    spot: "봉천역 2번출구",
-    pickup: "오늘 밤 8시",
-    leader: "준호",
-    temp: 36.5,
-    deals: 3,
-    reviews: 2,
-    noshow: 0,
-    tint: "#D8E0CC",
-    method: "품목별 나눔",
-    desc: "자취 청소템 모음. 수세미, 행주, 정리용품 등 필요한 것만 골라가도 돼요."
-  },
-  {
-    id: "d5",
-    cat: "식품",
-    title: "샤인머스캣 2박스 소분",
-    store: "청과마트 봉천",
-    total: 28000,
-    cur: 6,
-    max: 8,
-    dist: "200m",
-    deadline: "3시간 뒤 마감",
-    urgent: true,
-    spot: "기숙사 A동 앞",
-    pickup: "오늘 저녁 6시 반",
-    leader: "하늘",
-    temp: 40.1,
-    deals: 34,
-    reviews: 29,
-    noshow: 0,
-    tint: "#D6E2C8",
-    method: "한 송이씩",
-    desc: "당도 높은 샤인머스캣 도매로 떼와서 소분해요. 한 송이씩 가져가시면 됩니다. 완전 꿀!"
-  }
-];
-
-const MAP_POS: Record<string, { left: string; top: string }> = {
-  d1: { left: "46%", top: "30%" },
-  d2: { left: "72%", top: "40%" },
-  d3: { left: "30%", top: "56%" },
-  d4: { left: "64%", top: "70%" },
-  d5: { left: "40%", top: "78%" }
-};
-
-const HOME_FILTERS = ["전체", "베이커리", "식품", "간식", "생필품"];
-const CREATE_CATS = ["베이커리", "식품", "간식", "생필품", "뷰티"];
+const HOME_FILTERS = ["전체", "베이커리", "식품", "간식", "생필품", "기타"];
+const CREATE_CATS = ["베이커리", "식품", "간식", "생필품", "뷰티", "기타"];
 
 type ChatMsg = { type: "system" | "other" | "me"; name?: string; text: string; time?: string };
 
-const BASE_MSGS: ChatMsg[] = [
-  { type: "system", text: "민지님이 공구를 시작했어요" },
-  { type: "other", name: "민지", text: "안녕하세요! 크루아상 공구 시작합니다 🥐", time: "오후 4:02" },
-  { type: "other", name: "지우", text: "저 참여했어요~ 4개 가져갈게요", time: "오후 4:10" },
-  { type: "me", name: "나", text: "저도 참여했습니다! 7시에 정문에서 뵐게요", time: "오후 4:21" },
-  { type: "system", text: "앞으로 2명이면 모집 완료돼요" }
+/* Gonggu → Deal 어댑터 */
+const CATEGORY_TINTS: Record<string, string> = {
+  베이커리: "#F3DEC4",
+  식품: "#CFE2EC",
+  간식: "#F0D2CE",
+  생필품: "#D8E0CC",
+  뷰티: "#E8D5E5",
+  기타: "#EEE0E5"
+};
+
+function mapPos(id: string): { left: string; top: string } {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h * 31 + id.charCodeAt(i)) >>> 0);
+  const left = 18 + Math.round(((h & 0xff) / 255) * 62);
+  const top = 14 + Math.round((((h >> 8) & 0xff) / 255) * 64);
+  return { left: `${left}%`, top: `${top}%` };
+}
+
+function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
+  const gReviews = reviews.filter((r) => r.gongguId === g.id);
+  return {
+    id: g.id,
+    cat: g.category || "기타",
+    title: g.title,
+    store: g.purchaseStore,
+    total: g.totalPrice,
+    cur: g.currentParticipants,
+    max: g.targetParticipants,
+    dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
+    deadline: g.recruitmentDeadline,
+    urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
+    spot: g.pickupPlaceName,
+    pickup: g.pickupExpectedTime,
+    leader: g.hostNickname,
+    temp: g.hostTrustScore,
+    deals: 0,
+    reviews: gReviews.length,
+    noshow: 0,
+    tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
+    method: g.splitMethod,
+    desc: g.description
+  };
+}
+
+function chatMsgFromDomain(m: ChatMessage, myId: string): ChatMsg {
+  if (m.messageType === "system") return { type: "system", text: m.text };
+  return {
+    type: m.senderId === myId ? "me" : "other",
+    name: m.senderName,
+    text: m.text,
+    time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })
+  };
+}
+
+const SEED_MSGS: ChatMsg[] = [
+  { type: "system", text: "공구방이 열렸어요. 픽업 장소와 소분 방식을 확인해주세요" },
+  { type: "other", name: "공구장", text: "안녕하세요! 픽업 시간에 맞춰 준비해둘게요 😊", time: "오후 4:02" }
 ];
 
 const REVIEW_QUESTIONS: Array<{ key: ReviewKey; label: string }> = [
@@ -292,8 +235,8 @@ function gradientColor(stops: string[], ratio: number) {
 export function GongguMateApp() {
   const [screen, setScreen] = useState<Screen>("login");
   const [tab, setTab] = useState<MainTab>("home");
-  const [selectedId, setSelectedId] = useState("d1");
-  const [mapSel, setMapSel] = useState("d1");
+  const [selectedId, setSelectedId] = useState("");
+  const [mapSel, setMapSel] = useState("");
   const [joined, setJoined] = useState<string[]>([]);
   const [hearts, setHearts] = useState<string[]>([]);
   const [showJoin, setShowJoin] = useState(false);
@@ -306,8 +249,10 @@ export function GongguMateApp() {
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
   const [createCat, setCreateCat] = useState("베이커리");
-  const [cTotal, setCTotal] = useState("16800");
-  const [cMembers, setCMembers] = useState("6");
+  const [cTotal, setCTotal] = useState("");
+  const [cMembers, setCMembers] = useState("4");
+  const [cPickup, setCPickup] = useState("");
+  const [cTime, setCTime] = useState("");
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
     time: 0,
     fair: 0,
@@ -321,10 +266,65 @@ export function GongguMateApp() {
     chat: false
   });
 
+  /* ── Firebase 훅 ── */
+  const auth = useFirebaseAuth();
+  const data = useFirestoreData();
+
+  /* ── 도메인 → UI 어댑터 ── */
+  const deals = useMemo(
+    () => data.gonggus.map((g) => gongguToUi(g, data.reviews)),
+    [data.gonggus, data.reviews]
+  );
+
+  /* 첫 딜 로드 시 selectedId / mapSel 초기화 */
+  useEffect(() => {
+    if (deals.length > 0 && !selectedId) {
+      setSelectedId(deals[0]!.id);
+      setMapSel(deals[0]!.id);
+    }
+  }, [deals, selectedId]);
+
+  /* Google 로그인 성공 시 자동 진입 */
+  useEffect(() => {
+    if (screen === "login" && auth.user && !auth.user.isAnonymous) {
+      go("home", "home");
+    }
+  }, [auth.user, screen]);
+
+  /* 현재 사용자 (도메인 타입) */
+  const currentUser = useMemo<User>(
+    () => ({
+      id: auth.user?.uid ?? "user_me",
+      nickname: nickname.trim() || auth.user?.displayName || "봉천동이웃",
+      neighborhood: "봉천동",
+      universityVerified: false,
+      locationVerified: true,
+      trustScore: 36.5,
+      completedGongguCount: 0
+    }),
+    [auth.user, nickname]
+  );
+
+  /* 채팅 실시간 구독 */
+  const liveMessages = useChatMessages(selectedId);
+  const chatMsgs: ChatMsg[] = useMemo(
+    () =>
+      liveMessages
+        ? liveMessages.map((m) => chatMsgFromDomain(m, currentUser.id))
+        : [...SEED_MSGS, ...extraMsgs],
+    [liveMessages, extraMsgs, currentUser.id]
+  );
+
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const sel = useMemo(() => DEALS.find((d) => d.id === selectedId) ?? DEALS[0]!, [selectedId]);
-  const mapPick = useMemo(() => DEALS.find((d) => d.id === mapSel) ?? DEALS[0]!, [mapSel]);
+  const sel = useMemo(
+    () => deals.find((d) => d.id === selectedId) ?? deals[0] ?? null,
+    [deals, selectedId]
+  );
+  const mapPick = useMemo(
+    () => deals.find((d) => d.id === mapSel) ?? deals[0] ?? null,
+    [deals, mapSel]
+  );
 
   useEffect(() => {
     return () => {
@@ -349,17 +349,72 @@ export function GongguMateApp() {
     setScreen("detail");
   }
 
-  function confirmJoin() {
+  async function confirmJoin() {
+    if (!selectedId) return;
+    if (isFirebaseConfigured()) {
+      try {
+        await joinGongguDoc(selectedId, currentUser);
+      } catch {
+        showToast("참여 중 오류가 발생했어요. 다시 시도해주세요.");
+        return;
+      }
+    }
     setJoined((prev) => Array.from(new Set([...prev, selectedId])));
     setShowJoin(false);
     setScreen("chat");
     showToast("참여 완료! 채팅방에 입장했어요");
   }
 
-  function sendMessage(text: string) {
+  async function sendMessage(text: string) {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    setExtraMsgs((prev) => [...prev, { type: "me", name: "나", text: trimmed, time: "지금" }]);
+    if (!trimmed || !selectedId) return;
+    if (isFirebaseConfigured()) {
+      try {
+        await sendMessageDoc(selectedId, currentUser, trimmed);
+      } catch {
+        /* 실패해도 로컬에는 표시 */
+      }
+    }
+    if (!isFirebaseConfigured()) {
+      setExtraMsgs((prev) => [...prev, { type: "me", name: currentUser.nickname, text: trimmed, time: "지금" }]);
+    }
+  }
+
+  async function handleCreate() {
+    if (isFirebaseConfigured()) {
+      try {
+        await createGongguDoc(
+          {
+            title: `${createCat} 공구`,
+            totalPrice: Number(cTotal) || 0,
+            targetParticipants: Number(cMembers) || 4,
+            pickupPlaceName: cPickup || "장소 미정",
+            pickupExpectedTime: cTime || "시간 미정"
+          },
+          currentUser
+        );
+      } catch {
+        showToast("공구 생성에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
+    }
+    go("home", "home");
+    showToast("공구가 게시됐어요! 🎉");
+  }
+
+  async function handleReview(comment: string) {
+    if (!sel) return;
+    const gonggu = data.gonggus.find((g) => g.id === sel.id);
+    if (gonggu && isFirebaseConfigured()) {
+      try {
+        const avg = Object.values(ratings).reduce((a, b) => a + b, 0) / 4;
+        await submitReviewDoc(gonggu, currentUser, Math.round(avg) || 3, comment);
+      } catch {
+        /* 실패해도 화면 전환은 진행 */
+      }
+    }
+    go("mypage", "mypage");
+    showToast("후기가 등록됐어요. 고마워요!");
   }
 
   const showNav = (["home", "map", "chat", "mypage"] as Screen[]).includes(screen);
@@ -376,7 +431,8 @@ export function GongguMateApp() {
           <View style={styles.body}>
             {screen === "login" && (
               <LoginScreen
-                onSignup={() => {
+                auth={auth}
+                onVerify={() => {
                   setVerifyStep(0);
                   setScreen("verify");
                 }}
@@ -406,6 +462,7 @@ export function GongguMateApp() {
 
             {screen === "home" && (
               <HomeScreen
+                deals={deals}
                 filter={homeFilter}
                 onFilter={setHomeFilter}
                 onOpen={openDeal}
@@ -414,6 +471,7 @@ export function GongguMateApp() {
 
             {screen === "map" && (
               <MapScreen
+                deals={deals}
                 mapSel={mapSel}
                 pick={mapPick}
                 onPickMarker={setMapSel}
@@ -422,7 +480,7 @@ export function GongguMateApp() {
               />
             )}
 
-            {screen === "detail" && (
+            {screen === "detail" && sel && (
               <DetailScreen
                 deal={sel}
                 hearted={hearts.includes(sel.id)}
@@ -440,10 +498,10 @@ export function GongguMateApp() {
               />
             )}
 
-            {screen === "chat" && (
+            {screen === "chat" && sel && (
               <ChatScreen
                 deal={sel}
-                extraMsgs={extraMsgs}
+                messages={chatMsgs}
                 onBack={() => go(tab)}
                 onSend={sendMessage}
               />
@@ -455,36 +513,34 @@ export function GongguMateApp() {
                 onCat={setCreateCat}
                 total={cTotal}
                 members={cMembers}
+                pickup={cPickup}
+                time={cTime}
                 onTotal={setCTotal}
                 onMembers={setCMembers}
+                onPickup={setCPickup}
+                onTime={setCTime}
                 onBack={() => go(tab)}
-                onPost={() => {
-                  go("home", "home");
-                  showToast("공구가 게시됐어요! 🎉");
-                }}
+                onPost={handleCreate}
               />
             )}
 
-            {screen === "review" && (
+            {screen === "review" && sel && (
               <ReviewScreen
                 deal={sel}
                 ratings={ratings}
                 onRate={(key, value) => setRatings((prev) => ({ ...prev, [key]: value }))}
                 onBack={() => go("mypage", "mypage")}
-                onSubmit={() => {
-                  go("mypage", "mypage");
-                  showToast("후기가 등록됐어요. 고마워요!");
-                }}
+                onSubmit={handleReview}
               />
             )}
 
             {screen === "mypage" && (
               <MyPageScreen
-                nickname={nickname.trim() || "봉천동이웃"}
+                nickname={currentUser.nickname}
                 notif={notif}
                 onToggle={(key) => setNotif((prev) => ({ ...prev, [key]: !prev[key] }))}
                 onReviewDemo={() => {
-                  setSelectedId("d1");
+                  if (deals.length > 0) setSelectedId(deals[0]!.id);
                   setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
                   setScreen("review");
                 }}
@@ -503,7 +559,7 @@ export function GongguMateApp() {
             />
           )}
 
-          {showJoin && (
+          {showJoin && sel && (
             <JoinSheet deal={sel} onClose={() => setShowJoin(false)} onConfirm={confirmJoin} />
           )}
 
@@ -668,9 +724,30 @@ function GoogleGIcon({ size = 22 }: { size?: number }) {
 /* Login                                                               */
 /* ------------------------------------------------------------------ */
 
-function LoginScreen({ onSignup, onPeek }: { onSignup: () => void; onPeek: () => void }) {
+function LoginScreen({
+  auth,
+  onVerify,
+  onPeek
+}: {
+  auth: UseFirebaseAuth;
+  onVerify: () => void;
+  onPeek: () => void;
+}) {
   const { height } = useWindowDimensions();
   const isSmall = height < 700;
+  const loading = auth.status === "loading";
+
+  function handleKakao() {
+    /* Kakao OAuth 미구현 — 익명 세션 후 닉네임 설정으로 진입 */
+    void auth.signIn();
+    onVerify();
+  }
+
+  function handleGoogle() {
+    void auth.signInGoogle();
+    /* Google 로그인 성공 시 useEffect에서 자동 진입 */
+  }
+
   return (
     <View style={styles.loginWrap}>
       <View style={[styles.loginHero, isSmall && { gap: 14 }]}>
@@ -683,19 +760,35 @@ function LoginScreen({ onSignup, onPeek }: { onSignup: () => void; onPeek: () =>
         </View>
       </View>
 
+      {!!auth.error && (
+        <View style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
+          <Text style={{ fontSize: 12, color: t.rose, textAlign: "center" }}>{auth.error}</Text>
+        </View>
+      )}
+
       <View style={{ gap: 11, paddingBottom: isSmall ? 8 : 14 }}>
         {/* 카카오 공식 버튼 */}
-        <Pressable style={[styles.authButton, { backgroundColor: t.kakao }]} onPress={onSignup}>
+        <Pressable
+          style={[styles.authButton, { backgroundColor: t.kakao, opacity: loading ? 0.6 : 1 }]}
+          onPress={handleKakao}
+          disabled={loading}
+        >
           <KakaoIcon size={22} />
           <Text style={[styles.authButtonText, { color: t.kakaoInk }]}>카카오로 시작하기</Text>
         </Pressable>
         {/* Google 공식 버튼 */}
         <Pressable
-          style={[styles.authButton, { backgroundColor: "#fff", borderWidth: 1, borderColor: "#DADCE0" }]}
-          onPress={onSignup}
+          style={[
+            styles.authButton,
+            { backgroundColor: "#fff", borderWidth: 1, borderColor: "#DADCE0", opacity: loading ? 0.6 : 1 }
+          ]}
+          onPress={handleGoogle}
+          disabled={loading}
         >
           <GoogleGIcon size={22} />
-          <Text style={[styles.authButtonText, { color: "#3C4043" }]}>Google로 시작하기</Text>
+          <Text style={[styles.authButtonText, { color: "#3C4043" }]}>
+            {loading ? "로그인 중…" : "Google로 시작하기"}
+          </Text>
         </Pressable>
         <Pressable onPress={onPeek} style={{ paddingVertical: 6, alignItems: "center" }}>
           <Text style={{ color: t.dim, fontSize: 13 }}>먼저 둘러볼게요</Text>
@@ -833,15 +926,17 @@ function VerifyScreen({
 /* ------------------------------------------------------------------ */
 
 function HomeScreen({
+  deals,
   filter,
   onFilter,
   onOpen
 }: {
+  deals: Deal[];
   filter: string;
   onFilter: (f: string) => void;
   onOpen: (id: string) => void;
 }) {
-  const visible = DEALS.filter((d) => filter === "전체" || d.cat === filter);
+  const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
 
   return (
     <View style={styles.flex}>
@@ -955,14 +1050,16 @@ function ProgressBar({ pct }: { pct: number }) {
 /* ------------------------------------------------------------------ */
 
 function MapScreen({
+  deals,
   mapSel,
   pick,
   onPickMarker,
   onList,
   onOpen
 }: {
+  deals: Deal[];
   mapSel: string;
-  pick: Deal;
+  pick: Deal | null;
   onPickMarker: (id: string) => void;
   onList: () => void;
   onOpen: () => void;
@@ -980,9 +1077,9 @@ function MapScreen({
         <View style={styles.youDot} />
       </View>
 
-      {DEALS.map((d) => {
+      {deals.map((d) => {
         const on = d.id === mapSel;
-        const pos = MAP_POS[d.id]!;
+        const pos = mapPos(d.id);
         return (
           <Pressable
             key={d.id}
@@ -1014,6 +1111,7 @@ function MapScreen({
       </View>
 
       {/* bottom sheet */}
+      {pick && (
       <View style={styles.mapSheet}>
         <Pressable style={{ flexDirection: "row", gap: 12 }} onPress={onOpen}>
           <View style={[styles.mapSheetThumb, { backgroundColor: pick.tint }]} />
@@ -1040,6 +1138,7 @@ function MapScreen({
           <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>자세히 보기</Text>
         </Pressable>
       </View>
+      )}
     </View>
   );
 }
@@ -1212,17 +1311,16 @@ function GradientBar({ ratio, knobColor }: { ratio: number; knobColor: string })
 
 function ChatScreen({
   deal,
-  extraMsgs,
+  messages,
   onBack,
   onSend
 }: {
   deal: Deal;
-  extraMsgs: ChatMsg[];
+  messages: ChatMsg[];
   onBack: () => void;
   onSend: (text: string) => void;
 }) {
   const [input, setInput] = useState("");
-  const messages = [...BASE_MSGS, ...extraMsgs];
 
   function submit() {
     if (!input.trim()) return;
@@ -1322,8 +1420,12 @@ function CreateScreen({
   onCat,
   total,
   members,
+  pickup,
+  time,
   onTotal,
   onMembers,
+  onPickup,
+  onTime,
   onBack,
   onPost
 }: {
@@ -1331,10 +1433,14 @@ function CreateScreen({
   onCat: (c: string) => void;
   total: string;
   members: string;
+  pickup: string;
+  time: string;
   onTotal: (v: string) => void;
   onMembers: (v: string) => void;
+  onPickup: (v: string) => void;
+  onTime: (v: string) => void;
   onBack: () => void;
-  onPost: () => void;
+  onPost: () => void | Promise<void>;
 }) {
   const perPerson = fmt(Math.ceil((Number(total) || 0) / (Number(members) || 1)));
 
@@ -1432,6 +1538,8 @@ function CreateScreen({
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>픽업 장소</Text>
             <TextInput
+              value={pickup}
+              onChangeText={onPickup}
               placeholder="정문 CU 앞"
               placeholderTextColor={t.dim}
               style={styles.createInput}
@@ -1440,6 +1548,8 @@ function CreateScreen({
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>픽업 시간</Text>
             <TextInput
+              value={time}
+              onChangeText={onTime}
               placeholder="오늘 저녁 7시"
               placeholderTextColor={t.dim}
               style={styles.createInput}
@@ -1481,8 +1591,9 @@ function ReviewScreen({
   ratings: Record<ReviewKey, number>;
   onRate: (key: ReviewKey, value: number) => void;
   onBack: () => void;
-  onSubmit: () => void;
+  onSubmit: (comment: string) => void | Promise<void>;
 }) {
+  const [comment, setComment] = useState("");
   const done = REVIEW_QUESTIONS.every((q) => ratings[q.key] > 0);
 
   return (
@@ -1525,13 +1636,24 @@ function ReviewScreen({
             </View>
           ))}
         </View>
+
+        <View style={{ marginTop: 20 }}>
+          <Text style={styles.fieldLabel}>한 줄 후기 (선택)</Text>
+          <TextInput
+            value={comment}
+            onChangeText={setComment}
+            placeholder="거래 경험을 짧게 남겨주세요"
+            placeholderTextColor={t.dim}
+            style={[styles.createInput, { marginTop: 8 }]}
+          />
+        </View>
       </ScrollView>
 
       <View style={styles.stickyFooter}>
         <Pressable
           disabled={!done}
           style={[styles.footerButton, { backgroundColor: done ? t.pink : "#EDEAE3" }]}
-          onPress={onSubmit}
+          onPress={() => void onSubmit(comment)}
         >
           <Text style={{ fontSize: 16, fontWeight: "700", color: done ? "#fff" : t.dim }}>
             후기 제출하기
