@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -28,6 +28,7 @@ import {
   submitReview
 } from "../services/mock/mockRepository";
 import { getFirebaseServices, isFirebaseConfigured } from "../services/firebase/client";
+import { useFirebaseAuth, type AuthStatus } from "../features/auth/useFirebaseAuth";
 import { seedSnapshot } from "../services/mock/seed";
 import type { AppSnapshot, Gonggu, Settlement } from "../types/domain";
 
@@ -43,7 +44,16 @@ export function GongguMateApp() {
 
   const currentUser = useMemo(() => getCurrentUser(snapshot), [snapshot]);
   const firebaseConfigured = isFirebaseConfigured();
+  const auth = useFirebaseAuth();
   const selectedGonggu = snapshot.gonggus.find((gonggu) => gonggu.id === selectedGongguId) ?? null;
+
+  // 1단계: 로그인 화면 진입 시 자동으로 익명 인증을 시도한다.
+  // (콘솔에서 익명 로그인을 끈 상태면 status "error" 로 떨어지고, 버튼으로 재시도 가능)
+  useEffect(() => {
+    if (auth.status === "signed_out") {
+      void auth.signIn();
+    }
+  }, [auth.status]);
 
   function openGonggu(gongguId: string) {
     setSelectedGongguId(gongguId);
@@ -51,6 +61,10 @@ export function GongguMateApp() {
   }
 
   function login() {
+    // 익명 인증이 아직 안 됐으면(미설정/이전 실패) 다시 시도. 실패해도 POC 흐름은 계속 진행.
+    if (auth.status === "error" || auth.status === "signed_out") {
+      void auth.signIn();
+    }
     setIsLoggedIn(true);
     setScreen(currentUser.locationVerified ? "home" : "location");
   }
@@ -87,7 +101,13 @@ export function GongguMateApp() {
         style={styles.keyboardAvoiding}
       >
         {screen === "login" ? (
-          <LoginScreen firebaseConfigured={firebaseConfigured} onLogin={login} />
+          <LoginScreen
+            firebaseConfigured={firebaseConfigured}
+            authStatus={auth.status}
+            uid={auth.uid}
+            authError={auth.error}
+            onLogin={login}
+          />
         ) : screen === "location" ? (
           <LocationScreen userName={currentUser.nickname} onVerify={verifyLocation} />
         ) : (
@@ -157,8 +177,21 @@ export function GongguMateApp() {
   );
 }
 
-function LoginScreen({ firebaseConfigured, onLogin }: { firebaseConfigured: boolean; onLogin: () => void }) {
+function LoginScreen({
+  firebaseConfigured,
+  authStatus,
+  uid,
+  authError,
+  onLogin
+}: {
+  firebaseConfigured: boolean;
+  authStatus: AuthStatus;
+  uid: string | null;
+  authError: string | null;
+  onLogin: () => void;
+}) {
   const projectId = getFirebaseServices()?.app.options.projectId ?? "미설정";
+  const connected = authStatus === "signed_in";
 
   return (
     <View style={styles.login}>
@@ -171,19 +204,40 @@ function LoginScreen({ firebaseConfigured, onLogin }: { firebaseConfigured: bool
       </Text>
       <View style={styles.loginPanel}>
         <View style={styles.rowBetween}>
-          <Text style={styles.panelTitle}>POC 로그인</Text>
-          <Text style={firebaseConfigured ? styles.connectedBadge : styles.offlineBadge}>
-            {firebaseConfigured ? `Firebase ${projectId}` : "Firebase 미설정"}
+          <Text style={styles.panelTitle}>로그인</Text>
+          <Text style={connected ? styles.connectedBadge : styles.offlineBadge}>
+            {connected
+              ? `Firebase ${projectId} · 연결됨`
+              : firebaseConfigured
+                ? `Firebase ${projectId}`
+                : "Firebase 미설정"}
           </Text>
         </View>
-        <Text style={styles.bodyText}>
-          현재 버전은 mock 계정으로 화면 흐름을 유지하고, Firebase SDK 초기화 상태를 함께 확인합니다.
-        </Text>
-        <PrimaryButton label="민준으로 시작하기" onPress={onLogin} />
+        <Text style={styles.bodyText}>{loginStatusText(authStatus, uid, authError)}</Text>
+        <PrimaryButton
+          label={authStatus === "loading" ? "익명 연결 중…" : "민준으로 시작하기"}
+          onPress={onLogin}
+        />
         <SecondaryButton label="Google 로그인 자리" onPress={onLogin} />
       </View>
     </View>
   );
+}
+
+function loginStatusText(status: AuthStatus, uid: string | null, error: string | null): string {
+  switch (status) {
+    case "signed_in":
+      return `익명 인증 완료 · UID ${uid?.slice(0, 8) ?? ""}… (Firestore 연동 준비됨)`;
+    case "loading":
+      return "Firebase 익명 인증을 진행하고 있습니다…";
+    case "error":
+      return error ?? "익명 로그인에 실패했습니다.";
+    case "disabled":
+      return "현재 mock 계정으로 화면 흐름을 유지합니다. (.env 설정 시 Firebase 익명 인증이 켜집니다)";
+    case "signed_out":
+    default:
+      return "Firebase 익명 인증을 준비하고 있습니다.";
+  }
 }
 
 function LocationScreen({ userName, onVerify }: { userName: string; onVerify: () => void }) {
