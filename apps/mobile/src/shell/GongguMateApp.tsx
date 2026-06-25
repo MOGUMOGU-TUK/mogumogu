@@ -28,7 +28,9 @@ import {
   submitReview
 } from "../services/mock/mockRepository";
 import { getFirebaseServices, isFirebaseConfigured } from "../services/firebase/client";
+import { createGongguDoc } from "../services/firebase/gongguRepository";
 import { useFirebaseAuth, type AuthStatus } from "../features/auth/useFirebaseAuth";
+import { useGonggus, type GongguSource } from "../features/gonggu/useGonggus";
 import { seedSnapshot } from "../services/mock/seed";
 import type { AppSnapshot, Gonggu, Settlement } from "../types/domain";
 
@@ -45,6 +47,7 @@ export function GongguMateApp() {
   const currentUser = useMemo(() => getCurrentUser(snapshot), [snapshot]);
   const firebaseConfigured = isFirebaseConfigured();
   const auth = useFirebaseAuth();
+  const live = useGonggus();
   const selectedGonggu = snapshot.gonggus.find((gonggu) => gonggu.id === selectedGongguId) ?? null;
 
   // 1단계: 로그인 화면 진입 시 자동으로 익명 인증을 시도한다.
@@ -54,6 +57,12 @@ export function GongguMateApp() {
       void auth.signIn();
     }
   }, [auth.status]);
+
+  // 2단계: Firestore 공구 리스트를 snapshot.gonggus 에 동기화한다.
+  // (참여/정산/후기 등 로컬 상태는 별도 필드라 덮어쓰이지 않는다)
+  useEffect(() => {
+    setSnapshot((prev) => (prev.gonggus === live.gonggus ? prev : { ...prev, gonggus: live.gonggus }));
+  }, [live.gonggus]);
 
   function openGonggu(gongguId: string) {
     setSelectedGongguId(gongguId);
@@ -67,6 +76,26 @@ export function GongguMateApp() {
     }
     setIsLoggedIn(true);
     setScreen(currentUser.locationVerified ? "home" : "location");
+  }
+
+  // 공구 생성: Firebase 설정 시 Firestore 에 생성(구독이 리스트에 반영), 아니면 로컬 mock.
+  // rules: gonggus create 는 로그인 사용자 허용.
+  async function handleCreateGonggu(input: {
+    title: string;
+    totalPrice: number;
+    targetParticipants: number;
+    pickupPlaceName: string;
+    pickupExpectedTime: string;
+  }) {
+    if (firebaseConfigured) {
+      try {
+        await createGongguDoc(input, currentUser);
+      } catch {
+        Alert.alert("공구 생성 실패", "잠시 후 다시 시도해주세요.");
+      }
+      return;
+    }
+    setSnapshot((prev) => createGonggu(prev, input));
   }
 
   function verifyLocation() {
@@ -121,6 +150,7 @@ export function GongguMateApp() {
             {screen === "home" && (
               <HomeScreen
                 snapshot={snapshot}
+                source={live.source}
                 homeTab={homeTab}
                 onChangeTab={setHomeTab}
                 onOpenGonggu={openGonggu}
@@ -130,7 +160,7 @@ export function GongguMateApp() {
             {screen === "create" && (
               <CreateGongguScreen
                 onCreate={(input) => {
-                  setSnapshot((prev) => createGonggu(prev, input));
+                  void handleCreateGonggu(input);
                   setScreen("home");
                 }}
               />
@@ -310,14 +340,28 @@ function headerTitle(screen: Screen) {
   return titles[screen];
 }
 
+function gongguSourceLabel(source: GongguSource, count: number): string {
+  switch (source) {
+    case "firestore":
+      return `Firestore 실시간 · ${count}개`;
+    case "loading":
+      return "Firestore 불러오는 중…";
+    case "seed":
+    default:
+      return "샘플 데이터 (Firestore 비어있음/미설정)";
+  }
+}
+
 function HomeScreen({
   snapshot,
+  source,
   homeTab,
   onChangeTab,
   onOpenGonggu,
   onCreate
 }: {
   snapshot: AppSnapshot;
+  source: GongguSource;
   homeTab: HomeTab;
   onChangeTab: (tab: HomeTab) => void;
   onOpenGonggu: (gongguId: string) => void;
@@ -338,6 +382,7 @@ function HomeScreen({
       </View>
       {homeTab === "list" ? (
         <ScrollView contentContainerStyle={styles.listContent}>
+          <Text style={styles.caption}>{gongguSourceLabel(source, snapshot.gonggus.length)}</Text>
           <InfoBox
             title="오늘의 POC 흐름"
             body="아래 공구에 참여한 뒤 채팅, 픽업 완료, 후기 작성, 정산 지급가능 상태를 확인해보세요."
