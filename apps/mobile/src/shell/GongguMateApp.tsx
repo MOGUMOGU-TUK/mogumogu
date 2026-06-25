@@ -29,8 +29,14 @@ import {
 } from "../services/mock/mockRepository";
 import { getFirebaseServices, isFirebaseConfigured } from "../services/firebase/client";
 import { createGongguDoc } from "../services/firebase/gongguRepository";
+import {
+  cancelParticipationDoc,
+  confirmPickupDoc,
+  joinGongguDoc,
+  submitReviewDoc
+} from "../services/firebase/participationRepository";
 import { useFirebaseAuth, type AuthStatus, type AuthUser } from "../features/auth/useFirebaseAuth";
-import { useGonggus, type GongguSource } from "../features/gonggu/useGonggus";
+import { useFirestoreData, type GongguSource } from "../features/data/useFirestoreData";
 import { seedSnapshot } from "../services/mock/seed";
 import type { AppSnapshot, Gonggu, Settlement } from "../types/domain";
 
@@ -47,7 +53,7 @@ export function GongguMateApp() {
   const currentUser = useMemo(() => getCurrentUser(snapshot), [snapshot]);
   const firebaseConfigured = isFirebaseConfigured();
   const auth = useFirebaseAuth();
-  const live = useGonggus();
+  const data = useFirestoreData();
   const selectedGonggu = snapshot.gonggus.find((gonggu) => gonggu.id === selectedGongguId) ?? null;
 
   // 1단계: 로그인 화면 진입 시 자동으로 익명 인증을 시도한다.
@@ -67,11 +73,16 @@ export function GongguMateApp() {
     }
   }, [auth.user, screen, currentUser.locationVerified]);
 
-  // 2단계: Firestore 공구 리스트를 snapshot.gonggus 에 동기화한다.
-  // (참여/정산/후기 등 로컬 상태는 별도 필드라 덮어쓰이지 않는다)
+  // 2·3단계: Firestore 데이터(공구/참여/정산/후기)를 snapshot 에 동기화한다.
   useEffect(() => {
-    setSnapshot((prev) => (prev.gonggus === live.gonggus ? prev : { ...prev, gonggus: live.gonggus }));
-  }, [live.gonggus]);
+    setSnapshot((prev) => ({
+      ...prev,
+      gonggus: data.gonggus,
+      participations: data.participations,
+      settlements: data.settlements,
+      reviews: data.reviews
+    }));
+  }, [data.gonggus, data.participations, data.settlements, data.reviews]);
 
   function openGonggu(gongguId: string) {
     setSelectedGongguId(gongguId);
@@ -105,6 +116,43 @@ export function GongguMateApp() {
       return;
     }
     setSnapshot((prev) => createGonggu(prev, input));
+  }
+
+  // 참여/취소/픽업/후기: Firebase 설정 시 Firestore 에 직접 쓰고(구독이 화면 반영), 아니면 로컬 mock.
+  function runWrite(action: () => Promise<void>, failTitle: string) {
+    action().catch(() => Alert.alert(failTitle, "잠시 후 다시 시도해주세요."));
+  }
+
+  function handleJoin(gonggu: Gonggu) {
+    if (firebaseConfigured) {
+      runWrite(() => joinGongguDoc(gonggu.id, currentUser), "참여 실패");
+    } else {
+      setSnapshot((prev) => joinGonggu(prev, gonggu.id, currentUser.id));
+    }
+  }
+
+  function handleCancel(gonggu: Gonggu) {
+    if (firebaseConfigured) {
+      runWrite(() => cancelParticipationDoc(gonggu.id, currentUser.id), "참여 취소 실패");
+    } else {
+      setSnapshot((prev) => cancelParticipation(prev, gonggu.id, currentUser.id));
+    }
+  }
+
+  function handleConfirmPickup(gonggu: Gonggu) {
+    if (firebaseConfigured) {
+      runWrite(() => confirmPickupDoc(gonggu.id, currentUser.id), "픽업 확인 실패");
+    } else {
+      setSnapshot((prev) => confirmPickup(prev, gonggu.id, currentUser.id));
+    }
+  }
+
+  function handleSubmitReview(gonggu: Gonggu, rating: number, comment: string) {
+    if (firebaseConfigured) {
+      runWrite(() => submitReviewDoc(gonggu, currentUser, rating, comment), "후기 제출 실패");
+    } else {
+      setSnapshot((prev) => submitReview(prev, gonggu.id, currentUser.id, rating, comment));
+    }
   }
 
   function verifyLocation() {
@@ -160,7 +208,7 @@ export function GongguMateApp() {
             {screen === "home" && (
               <HomeScreen
                 snapshot={snapshot}
-                source={live.source}
+                source={data.source}
                 homeTab={homeTab}
                 onChangeTab={setHomeTab}
                 onOpenGonggu={openGonggu}
@@ -181,12 +229,12 @@ export function GongguMateApp() {
                 snapshot={snapshot}
                 gonggu={selectedGonggu}
                 currentUserId={currentUser.id}
-                onJoin={() => setSnapshot((prev) => joinGonggu(prev, selectedGonggu.id, currentUser.id))}
-                onCancel={() => setSnapshot((prev) => cancelParticipation(prev, selectedGonggu.id, currentUser.id))}
+                onJoin={() => handleJoin(selectedGonggu)}
+                onCancel={() => handleCancel(selectedGonggu)}
                 onChat={() => setScreen("chat")}
                 onSettlement={() => setScreen("settlement")}
                 onReview={() => setScreen("review")}
-                onConfirmPickup={() => setSnapshot((prev) => confirmPickup(prev, selectedGonggu.id, currentUser.id))}
+                onConfirmPickup={() => handleConfirmPickup(selectedGonggu)}
               />
             )}
             {selectedGonggu && screen === "chat" && (
@@ -204,7 +252,7 @@ export function GongguMateApp() {
               <ReviewScreen
                 gonggu={selectedGonggu}
                 onSubmit={(rating, comment) => {
-                  setSnapshot((prev) => submitReview(prev, selectedGonggu.id, currentUser.id, rating, comment));
+                  handleSubmitReview(selectedGonggu, rating, comment);
                   Alert.alert("후기 완료", "정산 상태가 지급 가능으로 변경되었습니다.");
                   setScreen("settlement");
                 }}

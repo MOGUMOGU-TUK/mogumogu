@@ -75,18 +75,49 @@ const gonggus = [
   }
 ];
 
+// 정산 문서 (앱의 로컬 seed 정산과 동일한 숫자).
+const settlements = [
+  {
+    id: "settlement_1",
+    gongguId: "gonggu_1",
+    hostUserId: "host_1",
+    totalAmount: 12900,
+    pricePerPerson: 4300,
+    participantCount: 3,
+    mode: "mock",
+    status: "pending",
+    releaseCondition: "all_pickup_confirmed_and_reviews_completed"
+  },
+  {
+    id: "settlement_2",
+    gongguId: "gonggu_2",
+    hostUserId: "host_2",
+    totalAmount: 9800,
+    pricePerPerson: 2450,
+    participantCount: 4,
+    mode: "mock",
+    status: "pending",
+    releaseCondition: "all_pickup_confirmed_and_reviews_completed"
+  }
+];
+
 await signInAnonymously(getAuth(app));
 const db = getFirestore(app);
 
-for (const { id, ...data } of gonggus) {
-  const ref = doc(db, "gonggus", id);
-  if ((await getDoc(ref)).exists()) {
-    console.log(`skip  ${id} (이미 존재)`);
-    continue;
+async function seedDocs(collectionName, items) {
+  for (const { id, ...data } of items) {
+    const ref = doc(db, collectionName, id);
+    if ((await getDoc(ref)).exists()) {
+      console.log(`skip  ${collectionName}/${id} (이미 존재)`);
+      continue;
+    }
+    await setDoc(ref, data);
+    console.log(`seed  ${collectionName}/${id}`);
   }
-  await setDoc(ref, data);
-  console.log(`seed  ${id}`);
 }
+
+await seedDocs("gonggus", gonggus);
+await seedDocs("settlements", settlements);
 
 console.log("done");
 process.exit(0);

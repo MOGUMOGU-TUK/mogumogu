@@ -1,5 +1,8 @@
 rules_version = '2';
 
+// ⚠️ POC 규칙: 참여/정산/후기를 클라이언트가 직접 쓰도록 일부 완화함.
+//    실서비스 전환 시 Cloud Functions 경유로 다시 조일 것
+//    (gonggus update / participations / settlements / reviews).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -23,7 +26,9 @@ service cloud.firestore {
     match /gonggus/{gongguId} {
       allow read: if signedIn();
       allow create: if signedIn();
-      allow update, delete: if false;
+      // POC: 참여 시 인원/상태 갱신을 클라이언트가 직접 수행
+      allow update: if signedIn();
+      allow delete: if false;
 
       match /participants/{userId} {
         allow read: if signedIn();
@@ -49,12 +54,20 @@ service cloud.firestore {
 
     match /reviews/{reviewId} {
       allow read: if signedIn();
-      allow create, update, delete: if false;
+      // POC: 후기 작성을 클라이언트가 직접 수행
+      allow create: if signedIn();
+      allow update, delete: if false;
     }
 
     match /settlements/{settlementId} {
       allow read: if signedIn();
-      allow write: if false;
+      // POC: 정산 숫자 계산/상태 전환을 클라이언트가 직접 수행
+      allow write: if signedIn();
+    }
+
+    match /participations/{participationId} {
+      // POC: 참여 내역을 클라이언트가 직접 읽고 씀
+      allow read, write: if signedIn();
     }
 
     match /payments/{paymentId} {
