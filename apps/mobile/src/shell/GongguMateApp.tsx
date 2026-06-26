@@ -270,7 +270,7 @@ export function GongguMateApp() {
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
-  const data = useFirestoreData(!!auth.user);
+  const data = useFirestoreData();
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
@@ -308,7 +308,7 @@ export function GongguMateApp() {
   );
 
   /* 채팅 실시간 구독 */
-  const liveMessages = useChatMessages(selectedId, !!auth.user);
+  const liveMessages = useChatMessages(selectedId);
   const chatMsgs: ChatMsg[] = useMemo(
     () =>
       liveMessages

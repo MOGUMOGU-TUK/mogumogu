@@ -27,7 +27,7 @@ export type FirestoreData = {
  * - 미설정 시: seed 데이터로 동작 (source `"seed"`)
  * - gonggus 가 비어 있으면 데모용으로 seed 공구를 보여준다.
  */
-export function useFirestoreData(authenticated = false): FirestoreData {
+export function useFirestoreData(): FirestoreData {
   const configured = isFirebaseConfigured();
   const [gonggus, setGonggus] = useState<Gonggu[]>(seedSnapshot.gonggus);
   const [source, setSource] = useState<GongguSource>(configured ? "loading" : "seed");
@@ -36,7 +36,7 @@ export function useFirestoreData(authenticated = false): FirestoreData {
   const [reviews, setReviews] = useState<Review[]>(seedSnapshot.reviews);
 
   useEffect(() => {
-    if (!configured || !authenticated) {
+    if (!configured) {
       return;
     }
 
@@ -54,7 +54,7 @@ export function useFirestoreData(authenticated = false): FirestoreData {
     ];
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [configured, authenticated]);
+  }, [configured]);
 
   return { gonggus, participations, settlements, reviews, source };
 }
