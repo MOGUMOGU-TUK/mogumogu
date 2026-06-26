@@ -14,7 +14,7 @@ export function useChatMessages(gongguId: string): ChatMessage[] | null {
   );
 
   useEffect(() => {
-    if (!isFirebaseConfigured()) {
+    if (!isFirebaseConfigured() || !gongguId) {
       setMessages(null);
       return;
     }
