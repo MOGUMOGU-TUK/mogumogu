@@ -1,82 +1,173 @@
-# mogumogu
+# 🛒 mogumogu (모구모구)
 
-`mogumogu`는 위치 인증된 이웃끼리 공동구매를 모집하고, 참여·채팅·정산·픽업·후기까지 한 흐름으로 처리하는 React Native 앱입니다. 현재 단계는 mock 데이터 기반 POC입니다.
+> **위치 인증된 이웃끼리, 모집부터 정산까지 한 번에 — 동네 공동구매 앱**
 
-## 프로젝트 구조
+대용량 상품을 혼자 사기 부담스러운 1인·소가구가, **검증된 동네 이웃**과 함께 사고 나누는 모바일 앱입니다.
+공구 **모집 → 참여 → 채팅 → 픽업 → 정산 → 후기**까지 흩어지지 않고 **한 흐름**으로 처리합니다.
 
+`React Native(Expo) · TypeScript · Firebase` | 상태: **핵심 기능 Firebase 실연동 POC 완료**
+
+---
+
+## 📌 한눈에 보기
+
+| | |
+|---|---|
+| **무엇** | 위치 인증 기반 동네 공동구매 플랫폼 |
+| **누구** | 코스트코·트레이더스 대용량이 부담스러운 1인·소가구 (대학가/원룸촌 등) |
+| **왜** | 기존 공구(오픈채팅·카페)는 흩어지고, 모르는 사람과 거래라 노쇼·정산 분쟁이 잦음 |
+| **어떻게** | 검증된 이웃끼리 + 모집~정산~후기 한 앱에서 + 신뢰도·필수 후기로 분쟁 최소화 |
+| **차별점** | 단순 채팅방이 아니라 **거래 상태(참여·픽업·정산·후기)를 끝까지 추적**하는 구조 |
+
+---
+
+## 1. 문제 (Problem)
+
+- 🧺 **대용량의 벽** — 코스트코·트레이더스 상품은 양이 많고 비싸 1인·소가구가 혼자 사기 어렵다.
+- 🔀 **흩어진 공구** — 지금의 공동구매는 오픈채팅·카페·엑셀에 흩어져 있어 모집·정산·기록이 분절된다.
+- 😟 **신뢰의 부재** — 모르는 사람과의 거래라 **노쇼, 돈 떼임, 정산 분쟁, 픽업 미이행**이 잦다.
+- 📉 **추적 불가** — 누가 참여했고, 픽업했고, 정산이 끝났는지 한눈에 관리할 방법이 없다.
+
+## 2. 솔루션 (Solution)
+
+> **"검증된 이웃과, 한 앱에서, 끝까지 추적되는 공동구매"**
+
+- 📍 **위치 인증** — 같은 동네(반경 N km) 이웃만 참여 → 신뢰 기반 거래
+- 🔗 **하나의 흐름** — 모집 → 참여 → 채팅 → 픽업 → 정산 → 후기를 한 앱에서 일괄 관리
+- ✅ **상태 추적** — 각 참여자의 결제·픽업·후기 상태를 실시간으로 관리
+- ⭐ **신뢰 장치** — 신뢰도 점수 + **필수 후기**로 노쇼·분쟁을 줄임
+
+## 3. 핵심 기능 (Key Features)
+
+| 기능 | 설명 |
+|------|------|
+| 🔐 **로그인** | 간편 로그인(익명/Google), 추후 카카오 로그인 |
+| 📍 **위치 인증** | 동네 인증으로 주변 공구만 노출 (집 주소는 비공개, 대략화) |
+| 📝 **공구 모집/탐색** | 주변 공구 리스트·지도, 공구 생성(상품·인원·픽업장소·시간) |
+| 🙋 **참여/취소** | 실시간 모집 현황, 1/N 자동 분담금 계산 |
+| 💬 **공구 채팅** | 참여자 전용 실시간 채팅으로 픽업 조율 |
+| 📦 **픽업 완료** | 픽업 확인 → 후기 단계로 전환 |
+| ⭐ **필수 후기** | 후기 작성 시 정산 "지급 가능"으로 전환 (노쇼 억제) |
+| 💸 **정산 상태** | 1인 금액·인원·지급 조건을 상태로 관리 (실결제는 MVP 이후) |
+
+## 4. 차별점 (왜 mogumogu인가)
+
+| | 오픈채팅·카페 공구 | 일반 중고거래 앱 | **mogumogu** |
+|---|---|---|---|
+| 이웃 신뢰 | 익명, 검증 없음 | 동네 인증 | **위치 인증된 이웃 한정** |
+| 모집~정산 흐름 | 채팅+수기로 흩어짐 | 1:1 거래 중심 | **한 앱에서 일괄 관리** |
+| 거래 상태 추적 | 불가(수동) | 제한적 | **참여·픽업·정산·후기 상태 추적** |
+| 노쇼·분쟁 방지 | 어려움 | 평점 정도 | **신뢰도 + 필수 후기 강제** |
+
+> 핵심은 "공구방"이 아니라 **"공구 거래를 끝까지 책임지는 상태 머신"**.
+
+## 5. 타겟 사용자
+
+- 🎓 **대학가·원룸촌 1인가구** — 적은 양만 필요, 대용량 부담
+- 🏠 **신혼·소가구** — 알뜰 소비, 동네 단위 거래 선호
+- ♻️ **알뜰·친환경 소비층** — 필요한 만큼만, 자원 낭비 줄이기
+
+## 6. 사용자 흐름 (User Flow)
+
+```
+회원가입 · 위치 인증
+      │
+      ▼
+주변 공구 탐색(리스트·지도) ──► 공구 생성(모집)
+      │
+      ▼
+참여 ──► 공구 채팅으로 픽업 조율 ──► 픽업 완료
+      │
+      ▼
+필수 후기 작성 ──► 정산 "지급 가능"으로 전환
+```
+
+## 7. 기술 스택 & 아키텍처
+
+**Frontend** React Native · Expo · TypeScript
+**Backend** Firebase (Authentication · Cloud Firestore) — 서버리스, 실시간 동기화
+**지도** 카카오맵 API (연동 진행 중)
+**구조** 모노레포 (`apps/mobile` · `firebase` · `docs`)
+
+```
+[ React Native + Expo 앱 ]
+        │  Firebase SDK (실시간 구독)
+        ▼
+[ Firebase Auth ]  [ Cloud Firestore ]
+   로그인 세션        공구·참여·정산·후기·채팅
+        │
+        └─ (연동 중) 카카오맵 SDK — 주변 공구 지도
+```
+
+> 데이터 변경이 **모든 사용자에게 실시간 반영**(onSnapshot 구독)되는 구조라, 모집 현황·채팅이 새로고침 없이 갱신됩니다.
+
+## 8. 개발 현황 ⭐ (기획이 아니라 "이미 동작하는 POC")
+
+> 본 프로젝트는 문서상 기획이 아니라, **핵심 흐름이 실제 Firebase에 연동되어 동작**합니다.
+
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| 로그인 (익명 / Google·웹) | ✅ 실연동 | Firebase Auth |
+| 공구 목록·생성 | ✅ 실연동 | Firestore 실시간 |
+| 참여 / 취소 | ✅ 실연동 | 인원·상태 자동 갱신 |
+| 픽업 / 후기 / 정산 | ✅ 실연동 | 상태 전환·1/N 계산 |
+| 공구 채팅 | ✅ 실연동 | Firestore 실시간 메시지 |
+| 주변 공구 지도 | 🔜 진행 중 | 카카오맵 연동 |
+| 위치 인증 (실제) | 🔜 예정 | 현재 데모 단계 |
+| 카카오/네이티브 로그인·푸시 | 🔜 예정 | EAS 빌드 단계 |
+
+## 9. 로드맵
+
+- **Phase 1 — POC (현재):** 핵심 거래 흐름 Firebase 실연동 ✅
+- **Phase 2 — MVP:** 카카오맵·실제 위치 인증, 카카오 로그인, 사용자 프로필, 푸시 알림(FCM), 보안 강화
+- **Phase 3 — 정식:** 실제 정산(PG) 연동, 신고·차단, 신뢰도 고도화, 디자인 정식판
+
+## 10. 기대 효과 / 비전
+
+- 🤝 **동네 단위 알뜰 소비 문화** — 이웃과 나눠 사며 생활비 절감
+- ♻️ **자원 절약** — 필요한 만큼만, 대용량 낭비 감소
+- 🏘️ **지역 커뮤니티 활성화** — 신뢰 기반 이웃 연결
+
+## 11. 팀
+
+| 이름 | 역할 | 담당 |
+|------|------|------|
+| (작성) | 기획 | |
+| (작성) | 프론트엔드 | |
+| (작성) | 백엔드 | |
+| (작성) | 디자인 | |
+
+---
+
+## 🛠 개발 가이드 (Getting Started)
+
+<details>
+<summary>실행 · 환경 설정 · 구조 (개발자용)</summary>
+
+### 프로젝트 구조
 ```
 mogumogu/
-├── apps/
-│   └── mobile/          # React Native + Expo 앱
-├── firebase/            # Firebase 백엔드 (Functions, Firestore/Storage rules, emulator)
-│   └── functions/       # Cloud Functions (TypeScript)
-├── docs/
-│   ├── planning/        # 기획
-│   ├── requirements/    # 요구사항
-│   ├── design/          # 디자인 (UI/UX 산출물)
-│   ├── api/             # API 명세 (openapi.yaml)
-│   ├── qa/              # 테스트 계획
-│   ├── launch/          # 출시 준비
-│   ├── growth/          # 그로스/지표
-│   ├── architecture.md  # 아키텍처 개요
-│   └── local-setup.md   # 로컬 개발 환경 설정
-└── package.json         # 루트 스크립트 (워크스페이스 위임)
+├── apps/mobile/     # React Native + Expo 앱
+├── firebase/        # Firestore 규칙 · Functions · 시드
+├── docs/            # 기획/요구사항/디자인/API/QA 문서
+└── package.json     # 루트 스크립트
 ```
 
-## 현재 POC 범위
-
-- React Native + Expo + TypeScript 앱 골격
-- Mock 로그인 / 위치 인증 mock
-- 주변 공구 리스트, 지도 placeholder, 공구 상세
-- 참여 / 참여 취소, 공구 채팅
-- 정산 상태 mock, 픽업 완료
-- 필수 후기 작성 후 지급 가능 상태 전환
-- Firebase Functions / API 문서 골격
-
-## Quick Start
-
+### 실행
 ```bash
-# 저장소 루트에서
-npm run ios      # iOS Simulator 실행
-npm run start    # Expo Go QR 스캔용 개발 서버
-npm run web      # 웹 프리뷰
+bun install                 # 또는 npm install
+npm run web                 # 웹 프리뷰 (가장 빠름)
+npm run ios                 # iOS 시뮬레이터
+npm run firebase:seed       # Firestore 데모 데이터 시드 (1회)
 ```
 
-앱 패키지를 직접 다루려면 `apps/mobile`에서 실행해도 됩니다.
+### 환경 변수
+`.env`는 커밋하지 않습니다. `apps/mobile/.env.example`을 복사해 Firebase config를 채우세요.
+자세한 순서: [firebase/setup.md](./firebase/setup.md) · 프론트 개편 가이드: [docs/design/frontend-handoff.md](./docs/design/frontend-handoff.md)
 
-```bash
-cd apps/mobile
-npm run start
-```
+### 협업 규칙
+- `main`에는 PR로 머지합니다.
+- 브랜치: `feat/<요약>`, `fix/<요약>`, `docs/<요약>`, `chore/<요약>`
+- 커밋: [Conventional Commits](https://www.conventionalcommits.org/)
 
-### 루트 스크립트
-
-| 스크립트 | 설명 |
-|----------|------|
-| `npm run ios` / `start` / `web` | 앱 실행 |
-| `npm run typecheck` | 앱 타입 체크 |
-| `npm run test` | 앱 테스트 |
-| `npm run functions:build` | Cloud Functions 빌드 |
-| `npm run functions:serve` | Functions 에뮬레이터 |
-
-## 환경 변수 (Firebase)
-
-`.env`는 **커밋하지 않습니다.** `apps/mobile/.env.example`을 복사해 값을 채우세요.
-
-```bash
-cp apps/mobile/.env.example apps/mobile/.env
-```
-
-Firebase config 발급 순서는 [firebase/setup.md](./firebase/setup.md)를 확인하세요.
-
-## Notes
-
-- Android Studio 없이도 Expo 개발 서버로 POC 확인이 가능합니다.
-- FCM, Kakao Login, Naver Map처럼 네이티브 설정이 필요한 기능은 Expo development build 또는 EAS Build 단계에서 붙입니다.
-- 실제 결제/보관금/자동 지급은 MVP에서 제외하고 상태 모델과 mock 흐름만 구현합니다.
-
-## 협업 규칙
-
-- `main`은 보호 브랜치입니다. 직접 push하지 않고 PR로 머지합니다.
-- 브랜치 네이밍: `feat/<요약>`, `fix/<요약>`, `docs/<요약>`, `chore/<요약>`
-- 커밋 메시지: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:` …)
+</details>
