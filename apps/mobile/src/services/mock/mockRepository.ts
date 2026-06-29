@@ -245,7 +245,7 @@ export function createGonggu(
     hostUserId: currentUser.id,
     hostNickname: currentUser.nickname,
     hostTrustScore: currentUser.trustScore,
-    purchaseStore: "직접 입력",
+    purchaseStore: "",
     totalPrice: input.totalPrice,
     targetParticipants: input.targetParticipants,
     currentParticipants: 1,
@@ -255,7 +255,7 @@ export function createGonggu(
     pickupExpectedTime: input.pickupExpectedTime,
     recruitmentDeadline: "오늘 23:59",
     status: "recruiting",
-    imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e",
+    imageUrls: ["https://images.unsplash.com/photo-1542838132-92c53300491e"],
     receiptVerified: false,
     settlementId
   };
