@@ -47,7 +47,7 @@ const gonggus = [
     pickupExpectedTime: "오늘 19:30",
     recruitmentDeadline: "오늘 18:30",
     status: "recruiting",
-    imageUrl: "https://images.unsplash.com/photo-1586444248902-2f64eddc13df",
+    imageUrls: ["https://images.unsplash.com/photo-1586444248902-2f64eddc13df"],
     receiptVerified: true,
     settlementId: "settlement_1"
   },
@@ -55,7 +55,7 @@ const gonggus = [
     id: "gonggu_2",
     title: "트레이더스 생수 2L 묶음 공구",
     description: "차량으로 가져오고 학교 정문에서 나눕니다. 무거우니 장바구니 챙겨주세요.",
-    category: "생필품",
+    category: "생활",
     hostUserId: "host_2",
     hostNickname: "마트원정대",
     hostTrustScore: 37.4,
@@ -69,7 +69,7 @@ const gonggus = [
     pickupExpectedTime: "내일 12:20",
     recruitmentDeadline: "오늘 23:00",
     status: "recruiting",
-    imageUrl: "https://images.unsplash.com/photo-1560472354-b33ff0c44a43",
+    imageUrls: ["https://images.unsplash.com/photo-1560472354-b33ff0c44a43"],
     receiptVerified: false,
     settlementId: "settlement_2"
   }
