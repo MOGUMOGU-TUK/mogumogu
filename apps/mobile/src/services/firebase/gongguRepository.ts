@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, Timestamp, writeBatch } from "firebase/firestore";
 
 import type { Gonggu, Settlement, User } from "../../types/domain";
 import { getFirebaseServices } from "./client";
@@ -82,8 +82,11 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     releaseCondition: "all_pickup_confirmed_and_reviews_completed"
   };
 
+  const midnightTonight = new Date();
+  midnightTonight.setHours(23, 59, 0, 0);
+
   const batch = writeBatch(db);
-  batch.set(gongguRef, gonggu);
+  batch.set(gongguRef, { ...gonggu, deadlineAt: Timestamp.fromDate(midnightTonight) });
   batch.set(doc(db, SETTLEMENTS, settlementId), settlement);
   await batch.commit();
 

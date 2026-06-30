@@ -52,21 +52,14 @@ export async function signInAnonymously(): Promise<void> {
   await firebaseSignInAnonymously(services.auth);
 }
 
-/**
- * Google 로그인. 현재는 웹(팝업)만 지원한다.
- * 네이티브(iOS/Android)는 expo-auth-session + OAuth 클라이언트 설정이 추가로 필요하다.
- */
+/** 웹 팝업 Google 로그인. 네이티브는 useGoogleSignIn 훅을 사용한다. */
 export async function signInWithGoogle(): Promise<void> {
   const services = getFirebaseServices();
   if (!services) {
     throw new Error("Firebase가 설정되지 않았습니다. apps/mobile/.env 를 확인하세요.");
   }
 
-  if (Platform.OS !== "web") {
-    const error = new Error("native google sign-in not configured");
-    (error as { code?: string }).code = "auth/native-google-unsupported";
-    throw error;
-  }
+  if (Platform.OS !== "web") return;
 
   await signInWithPopup(services.auth, new GoogleAuthProvider());
 }
@@ -83,8 +76,6 @@ export function mapAuthError(error: unknown): string {
       return "Google 로그인 창이 닫혀 로그인이 취소되었습니다.";
     case "auth/popup-blocked":
       return "브라우저가 팝업을 차단했습니다. 팝업을 허용한 뒤 다시 시도하세요.";
-    case "auth/native-google-unsupported":
-      return "네이티브 앱의 Google 로그인은 추가 설정 후 지원됩니다. 지금은 웹에서 사용하세요.";
     case "auth/network-request-failed":
       return "네트워크 오류로 로그인에 실패했습니다. 연결 상태를 확인하세요.";
     default:

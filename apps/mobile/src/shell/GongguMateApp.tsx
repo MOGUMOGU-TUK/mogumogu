@@ -1,3 +1,4 @@
+import * as Notifications from "expo-notifications";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -20,6 +21,12 @@ import { useFirestoreData } from "../features/data/useFirestoreData";
 import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import { createGongguDoc } from "../services/firebase/gongguRepository";
+import {
+  initNotifications,
+  loadNotifSettings,
+  saveNotifSettings,
+  type NotifSettings
+} from "../services/firebase/notificationService";
 import {
   joinGongguDoc,
   submitReviewDoc
@@ -178,7 +185,7 @@ const NOTIF_ITEMS: Array<{ key: NotifKey; label: string }> = [
 ];
 
 type ReviewKey = "time" | "fair" | "manner" | "desc";
-type NotifKey = "join" | "full" | "deadline" | "chat";
+type NotifKey = keyof NotifSettings;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -292,6 +299,36 @@ export function GongguMateApp() {
       go("home", "home");
     }
   }, [auth.user, screen]);
+
+  /* 로그인 후 FCM 토큰 등록 + 알림 설정 로드 */
+  useEffect(() => {
+    const uid = auth.user?.uid;
+    if (!uid || auth.user?.isAnonymous) return;
+    void initNotifications(uid);
+    void loadNotifSettings(uid).then(setNotif);
+  }, [auth.user?.uid, auth.user?.isAnonymous]);
+
+  /* 알림 탭 시 해당 화면으로 이동 */
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as {
+        gongguId?: string;
+        type?: string;
+      };
+      if (data?.gongguId) {
+        setSelectedId(data.gongguId);
+        setShowJoin(false);
+        if (data.type === "chat") {
+          setTab("chat");
+          setScreen("chat");
+        } else {
+          setTab("home");
+          setScreen("detail");
+        }
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   /* 현재 사용자 (도메인 타입) */
   const currentUser = useMemo<User>(
@@ -553,7 +590,16 @@ export function GongguMateApp() {
               <MyPageScreen
                 nickname={currentUser.nickname}
                 notif={notif}
-                onToggle={(key) => setNotif((prev) => ({ ...prev, [key]: !prev[key] }))}
+                onToggle={(key) => {
+                  setNotif((prev) => {
+                    const next = { ...prev, [key]: !prev[key] } as NotifSettings;
+                    const uid = auth.user?.uid;
+                    if (uid && !auth.user?.isAnonymous) {
+                      void saveNotifSettings(uid, next);
+                    }
+                    return next;
+                  });
+                }}
                 onReviewDemo={() => {
                   if (deals.length > 0) setSelectedId(deals[0]!.id);
                   setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
