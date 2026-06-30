@@ -8,3 +8,6 @@ lib/
 !.env.example
 .DS_Store
 *.log
+apps/mobile/google-services.json
+apps/mobile/GoogleService-Info.plist
+.idea/

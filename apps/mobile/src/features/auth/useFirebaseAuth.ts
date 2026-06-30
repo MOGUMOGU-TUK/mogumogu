@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import {
   mapAuthError,
   signInAnonymously,
-  signInWithGoogle,
   subscribeAuth,
   toAuthUser,
   type AuthUser
 } from "../../services/firebase/auth";
 import { getFirebaseServices } from "../../services/firebase/client";
+import { useGoogleSignIn } from "./useGoogleSignIn";
 
 export type { AuthUser };
 
@@ -23,8 +23,8 @@ export type FirebaseAuthState = {
 export type UseFirebaseAuth = FirebaseAuthState & {
   /** 익명 로그인 (데이터 읽기용 배경 세션). */
   signIn: () => Promise<void>;
-  /** Google 로그인 (웹 팝업). */
-  signInGoogle: () => Promise<void>;
+  /** Google 로그인 (웹: 팝업 / 네이티브: expo-auth-session). */
+  signInGoogle: () => void;
 };
 
 const DISABLED: FirebaseAuthState = { status: "disabled", user: null, error: null };
@@ -56,28 +56,39 @@ export function useFirebaseAuth(): UseFirebaseAuth {
     );
   }, []);
 
-  async function run(action: () => Promise<void>) {
-    if (!getFirebaseServices()) {
-      return;
-    }
+  function setError(error: unknown) {
+    setState((prev) => ({
+      status: prev.user ? "signed_in" : "error",
+      user: prev.user,
+      error: mapAuthError(error)
+    }));
+  }
 
+  async function run(action: () => Promise<void>) {
+    if (!getFirebaseServices()) return;
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     try {
       await action();
-      // 성공 시 위 구독이 signed_in 으로 갱신
     } catch (error) {
-      setState((prev) => ({
-        // 기존 로그인 세션이 있으면 유지하고 에러만 표시
-        status: prev.user ? "signed_in" : "error",
-        user: prev.user,
-        error: mapAuthError(error)
-      }));
+      setError(error);
     }
+  }
+
+  function resetLoading() {
+    setState((prev) => (prev.status === "loading" ? { ...prev, status: prev.user ? "signed_in" : "signed_out" } : prev));
+  }
+
+  const googleSignIn = useGoogleSignIn(setError, resetLoading);
+
+  function signInGoogle() {
+    if (!getFirebaseServices()) return;
+    setState((prev) => ({ ...prev, status: "loading", error: null }));
+    googleSignIn.promptAsync();
   }
 
   return {
     ...state,
     signIn: () => run(signInAnonymously),
-    signInGoogle: () => run(signInWithGoogle)
+    signInGoogle
   };
 }

@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, doc, onSnapshot, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes, type FirebaseStorage } from "firebase/storage";
 
 import type { Gonggu, Settlement, User } from "../../types/domain";
@@ -108,8 +108,11 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     releaseCondition: "all_pickup_confirmed_and_reviews_completed"
   };
 
+  const midnightTonight = new Date();
+  midnightTonight.setHours(23, 59, 0, 0);
+
   const batch = writeBatch(db);
-  batch.set(gongguRef, gonggu);
+  batch.set(gongguRef, { ...gonggu, deadlineAt: Timestamp.fromDate(midnightTonight) });
   batch.set(doc(db, SETTLEMENTS, settlementId), settlement);
   await batch.commit();
 
@@ -161,8 +164,6 @@ export async function updateGongguDoc(gongguId: string, input: UpdateGongguInput
 /**
  * 공구 삭제(방장만 호출). 문서는 지우지 않고 상태만 canceled 로 바꿔서
  * 목록 노출은 멈추되 참여자와의 채팅 기록은 그대로 남기고, 종료 안내 메시지를 남긴다.
- * `hideForHost`를 켜면 같은 batch로 hostHidden 도 함께 켜서, 방장 본인의 채팅 목록에서도 바로 사라진다
- * (채팅방 안의 "나가기"처럼 삭제와 나가기를 한 번에 처리해야 하는 경우용).
  */
 export async function cancelGongguDoc(gongguId: string, options?: { hideForHost?: boolean }): Promise<void> {
   const services = getFirebaseServices();
@@ -189,7 +190,6 @@ export async function cancelGongguDoc(gongguId: string, options?: { hideForHost?
 
 /**
  * 방장이 이미 종료된 공구의 채팅방에서 "나가기"를 누른 경우: 본인 채팅 목록에서만 숨긴다.
- * 공구/채팅 데이터 자체는 그대로 두고 hostHidden 플래그만 켠다.
  */
 export async function hideGongguChatDoc(gongguId: string): Promise<void> {
   const services = getFirebaseServices();

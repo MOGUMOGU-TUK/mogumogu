@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   Image,
@@ -27,6 +28,12 @@ import {
   hideGongguChatDoc,
   updateGongguDoc
 } from "../services/firebase/gongguRepository";
+import {
+  initNotifications,
+  loadNotifSettings,
+  saveNotifSettings,
+  type NotifSettings
+} from "../services/firebase/notificationService";
 import {
   cancelParticipationDoc,
   joinGongguDoc,
@@ -74,7 +81,6 @@ type Screen =
   | "home"
   | "map"
   | "detail"
-  | "chatList"
   | "chat"
   | "create"
   | "review"
@@ -103,25 +109,20 @@ type Deal = {
   tint: string;
   method: string;
   desc: string;
-  images: string[];
-  hostUserId: string;
-  closed: boolean;
-  hostHidden: boolean;
 };
 
-const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구/인테리어", "스포츠", "기타"];
-const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구/인테리어", "스포츠", "기타"];
+const HOME_FILTERS = ["전체", "베이커리", "식품", "간식", "생필품", "기타"];
+const CREATE_CATS = ["베이커리", "식품", "간식", "생필품", "뷰티", "기타"];
 
 type ChatMsg = { type: "system" | "other" | "me"; name?: string; text: string; time?: string };
 
 /* Gonggu → Deal 어댑터 */
 const CATEGORY_TINTS: Record<string, string> = {
+  베이커리: "#F3DEC4",
   식품: "#CFE2EC",
-  생활: "#D8E0CC",
-  패션: "#E8D5E5",
-  반려동물: "#E3D2C3",
-  "가구/인테리어": "#F3DEC4",
-  스포츠: "#C9E4CA",
+  간식: "#F0D2CE",
+  생필품: "#D8E0CC",
+  뷰티: "#E8D5E5",
   기타: "#EEE0E5"
 };
 
@@ -139,13 +140,13 @@ function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
     id: g.id,
     cat: g.category || "기타",
     title: g.title,
-    store: g.purchaseStore === "직접 입력" ? "" : g.purchaseStore,
+    store: g.purchaseStore,
     total: g.totalPrice,
     cur: g.currentParticipants,
     max: g.targetParticipants,
     dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
-    deadline: formatDeadline(g.recruitmentDeadline),
-    urgent: isUrgentDeadline(g.recruitmentDeadline),
+    deadline: g.recruitmentDeadline,
+    urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
     spot: g.pickupPlaceName,
     pickup: g.pickupExpectedTime,
     leader: g.hostNickname,
@@ -155,11 +156,7 @@ function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
     noshow: 0,
     tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
     method: g.splitMethod,
-    desc: g.description,
-    images: g.imageUrls ?? [],
-    hostUserId: g.hostUserId,
-    closed: g.status === "canceled",
-    hostHidden: g.hostHidden ?? false
+    desc: g.description
   };
 }
 
@@ -196,61 +193,18 @@ const NOTIF_ITEMS: Array<{ key: NotifKey; label: string }> = [
 ];
 
 type ReviewKey = "time" | "fair" | "manner" | "desc";
-type NotifKey = "join" | "full" | "deadline" | "chat";
+type NotifKey = keyof NotifSettings;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
-
-function toDateStr(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function buildDeadlineIso(dateStr: string, hhmm: string): string {
-  const [y, mo, d] = dateStr.split("-").map(Number);
-  const [h, m] = hhmm.split(":").map(Number);
-  const date = new Date(y ?? 1970, (mo ?? 1) - 1, d ?? 1, h ?? 23, m ?? 59, 0, 0);
-  return date.toISOString();
-}
-
-function formatDateLabel(dateStr: string): string {
-  const dayDiff = Math.round(
-    (new Date(dateStr).getTime() - new Date(toDateStr(new Date())).getTime()) / 86400000
-  );
-  if (dayDiff === 0) return "오늘";
-  if (dayDiff === 1) return "내일";
-  if (dayDiff === 2) return "모레";
-  const [, mo, d] = dateStr.split("-").map(Number);
-  return `${mo}월 ${d}일`;
-}
-
-/** ISO 타임스탬프면 "n분/시간/일 뒤 마감"으로 환산, 옛 포맷(고정 문구) 데이터면 그대로 보여준다. */
-function formatDeadline(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const diffMs = date.getTime() - Date.now();
-  if (diffMs <= 0) return "마감";
-  const diffMin = Math.round(diffMs / 60000);
-  if (diffMin < 60) return `${diffMin}분 뒤 마감`;
-  const diffHour = Math.round(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}시간 뒤 마감`;
-  return `${Math.round(diffHour / 24)}일 뒤 마감`;
-}
-
-function isUrgentDeadline(value: string): boolean {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return /[12]시간|30분|마감/.test(value);
-  return date.getTime() - Date.now() <= 2 * 60 * 60 * 1000;
-}
 
 const fmt = (n: number) => `${Number(n).toLocaleString("ko-KR")}원`;
 const per = (d: Deal) => Math.ceil(d.total / d.max);
 const memberStr = (d: Deal) => `${d.cur}/${d.max}명`;
 const barPct = (d: Deal) => Math.round((d.cur / d.max) * 100);
 const remain = (d: Deal) => `앞으로 ${d.max - d.cur}명`;
-const statusOf = (d: Deal) => (d.closed ? "종료" : d.cur >= d.max ? "모집완료" : "모집중");
+const statusOf = (d: Deal) => (d.cur >= d.max ? "모집완료" : "모집중");
 const tempStr = (n: number) => `${n.toFixed(1)}°C`;
 
 function tempColor(n: number) {
@@ -302,11 +256,7 @@ export function GongguMateApp() {
   const [mapSel, setMapSel] = useState("");
   const [joined, setJoined] = useState<string[]>([]);
   const [hearts, setHearts] = useState<string[]>([]);
-  const [leftChatIds, setLeftChatIds] = useState<string[]>([]);
   const [showJoin, setShowJoin] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [showHostLeaveConfirm, setShowHostLeaveConfirm] = useState(false);
   const [toast, setToast] = useState("");
 
   const [nickname, setNickname] = useState("");
@@ -315,17 +265,11 @@ export function GongguMateApp() {
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
-  const [createCat, setCreateCat] = useState("식품");
-  const [cTitle, setCTitle] = useState("");
+  const [createCat, setCreateCat] = useState("베이커리");
   const [cTotal, setCTotal] = useState("");
-  const [cMembers, setCMembers] = useState("");
+  const [cMembers, setCMembers] = useState("4");
   const [cPickup, setCPickup] = useState("");
   const [cTime, setCTime] = useState("");
-  const [cSplit, setCSplit] = useState("");
-  const [cPhotos, setCPhotos] = useState<string[]>([]);
-  const [cDeadlineDate, setCDeadlineDate] = useState(() => toDateStr(new Date()));
-  const [cDeadlineTime, setCDeadlineTime] = useState("23:59");
-  const [editingGongguId, setEditingGongguId] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
     time: 0,
     fair: 0,
@@ -349,16 +293,13 @@ export function GongguMateApp() {
     [data.gonggus, data.reviews]
   );
 
-  /* 홈/지도 탐색용: 삭제(종료)된 공구는 목록에서 제외 */
-  const browsableDeals = useMemo(() => deals.filter((d) => !d.closed), [deals]);
-
   /* 첫 딜 로드 시 selectedId / mapSel 초기화 */
   useEffect(() => {
-    if (browsableDeals.length > 0 && !selectedId) {
-      setSelectedId(browsableDeals[0]!.id);
-      setMapSel(browsableDeals[0]!.id);
+    if (deals.length > 0 && !selectedId) {
+      setSelectedId(deals[0]!.id);
+      setMapSel(deals[0]!.id);
     }
-  }, [browsableDeals, selectedId]);
+  }, [deals, selectedId]);
 
   /* Google 로그인 성공 시 자동 진입 */
   useEffect(() => {
@@ -366,6 +307,36 @@ export function GongguMateApp() {
       go("home", "home");
     }
   }, [auth.user, screen]);
+
+  /* 로그인 후 FCM 토큰 등록 + 알림 설정 로드 */
+  useEffect(() => {
+    const uid = auth.user?.uid;
+    if (!uid || auth.user?.isAnonymous) return;
+    void initNotifications(uid);
+    void loadNotifSettings(uid).then(setNotif);
+  }, [auth.user?.uid, auth.user?.isAnonymous]);
+
+  /* 알림 탭 시 해당 화면으로 이동 */
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as {
+        gongguId?: string;
+        type?: string;
+      };
+      if (data?.gongguId) {
+        setSelectedId(data.gongguId);
+        setShowJoin(false);
+        if (data.type === "chat") {
+          setTab("chat");
+          setScreen("chat");
+        } else {
+          setTab("home");
+          setScreen("detail");
+        }
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   /* 현재 사용자 (도메인 타입) */
   const currentUser = useMemo<User>(
@@ -398,23 +369,9 @@ export function GongguMateApp() {
     [deals, selectedId]
   );
   const mapPick = useMemo(
-    () => browsableDeals.find((d) => d.id === mapSel) ?? browsableDeals[0] ?? null,
-    [browsableDeals, mapSel]
+    () => deals.find((d) => d.id === mapSel) ?? deals[0] ?? null,
+    [deals, mapSel]
   );
-
-  /* 채팅 목록: 내가 만들었거나 참여 중인 공구만 (나가기 누른 방은 즉시 숨김, 방장 쪽은 hostHidden 으로 영구 반영) */
-  const myChats = useMemo(() => {
-    const joinedIds = new Set(
-      data.participations.filter((p) => p.userId === currentUser.id).map((p) => p.gongguId)
-    );
-    return deals
-      .filter((d) => {
-        if (leftChatIds.includes(d.id)) return false;
-        if (d.hostUserId === currentUser.id) return !d.hostHidden;
-        return joinedIds.has(d.id);
-      })
-      .map((deal) => ({ deal, isHost: deal.hostUserId === currentUser.id }));
-  }, [deals, data.participations, currentUser.id, leftChatIds]);
 
   useEffect(() => {
     return () => {
@@ -428,49 +385,18 @@ export function GongguMateApp() {
     setShowJoin(false);
   }
 
-  /* 탭의 루트 화면으로 복귀 ("chat" 탭의 루트는 채팅 목록) */
-  function goToTabRoot() {
-    go(tab === "chat" ? "chatList" : tab);
-  }
-
-  function resetCreateForm() {
-    setCreateCat("식품");
-    setCTitle("");
-    setCTotal("");
-    setCMembers("");
-    setCPickup("");
-    setCTime("");
-    setCSplit("");
-    setCPhotos([]);
-    setCDeadlineDate(toDateStr(new Date()));
-    setCDeadlineTime("23:59");
-  }
-
-  /* "공구 만들기/수정" 화면 나가기: 수정 중이었으면 상세화면으로, 아니면 탭 루트로 */
-  function exitCreateScreen() {
-    const wasEditing = editingGongguId !== null;
-    setEditingGongguId(null);
-    resetCreateForm();
-    if (wasEditing) go("detail");
-    else goToTabRoot();
-  }
-
   /* Android 물리 뒤로가기 버튼 */
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (showDeleteConfirm) { setShowDeleteConfirm(false); return true; }
-      if (showLeaveConfirm) { setShowLeaveConfirm(false); return true; }
-      if (showHostLeaveConfirm) { setShowHostLeaveConfirm(false); return true; }
       if (showJoin) { setShowJoin(false); return true; }
       if (screen === "verify") { setScreen("login"); return true; }
-      if (screen === "create") { exitCreateScreen(); return true; }
-      if (screen === "detail" || screen === "review") { goToTabRoot(); return true; }
-      if (screen === "chat") { go("chatList", "chat"); return true; }
-      if (screen === "map" || screen === "mypage" || screen === "chatList") { go("home", "home"); return true; }
+      if (screen === "detail" || screen === "create" || screen === "review") { go(tab); return true; }
+      if (screen === "chat") { go(tab); return true; }
+      if (screen === "map" || screen === "mypage") { go("home", "home"); return true; }
       return false; // login / home → 시스템이 처리 (앱 종료)
     });
     return () => sub.remove();
-  }, [screen, tab, showJoin, showDeleteConfirm, showLeaveConfirm, showHostLeaveConfirm, editingGongguId]);
+  }, [screen, tab, showJoin]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -483,51 +409,17 @@ export function GongguMateApp() {
     setScreen("detail");
   }
 
-  function openChatRoom(id: string) {
-    setSelectedId(id);
-    go("chat", "chat");
-  }
-
-  /* 방장이 본인 공구 내용을 고치러 들어갈 때 폼에 기존 값을 채워둔다 */
-  function startEdit() {
-    const gonggu = data.gonggus.find((g) => g.id === selectedId);
-    if (!gonggu) return;
-    setCreateCat(gonggu.category);
-    setCTitle(gonggu.title);
-    setCTotal(String(gonggu.totalPrice));
-    setCMembers(String(gonggu.targetParticipants));
-    setCPickup(gonggu.pickupPlaceName);
-    setCTime(gonggu.pickupExpectedTime);
-    setCSplit(gonggu.splitMethod);
-    setCPhotos(gonggu.imageUrls ?? []);
-
-    const deadline = new Date(gonggu.recruitmentDeadline);
-    if (Number.isNaN(deadline.getTime())) {
-      setCDeadlineDate(toDateStr(new Date()));
-      setCDeadlineTime("23:59");
-    } else {
-      setCDeadlineDate(toDateStr(deadline));
-      setCDeadlineTime(
-        `${String(deadline.getHours()).padStart(2, "0")}:${String(deadline.getMinutes()).padStart(2, "0")}`
-      );
-    }
-
-    setEditingGongguId(gonggu.id);
-    setScreen("create");
-  }
-
   async function confirmJoin() {
     if (!selectedId) return;
     if (isFirebaseConfigured()) {
       try {
         await joinGongguDoc(selectedId, currentUser);
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : "참여 중 오류가 발생했어요. 다시 시도해주세요.");
+      } catch {
+        showToast("참여 중 오류가 발생했어요. 다시 시도해주세요.");
         return;
       }
     }
     setJoined((prev) => Array.from(new Set([...prev, selectedId])));
-    setLeftChatIds((prev) => prev.filter((id) => id !== selectedId));
     setShowJoin(false);
     setScreen("chat");
     showToast("참여 완료! 채팅방에 입장했어요");
@@ -548,132 +440,26 @@ export function GongguMateApp() {
     }
   }
 
-  async function pickPhoto() {
-    if (cPhotos.length >= 5) return;
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      showToast("사진 접근 권한이 필요해요.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
-      quality: 0.7,
-      allowsMultipleSelection: true,
-      selectionLimit: 5 - cPhotos.length
-    });
-    if (!result.canceled) {
-      setCPhotos((prev) => [...prev, ...result.assets.map((a) => a.uri)].slice(0, 5));
-    }
-  }
-
-  function removePhoto(uri: string) {
-    setCPhotos((prev) => prev.filter((p) => p !== uri));
-  }
-
   async function handleCreate() {
-    const editingId = editingGongguId;
-    const payload = {
-      title: cTitle.trim() || `${createCat} 공구`,
-      category: createCat,
-      totalPrice: Number(cTotal) || 0,
-      targetParticipants: cMembers ? Math.max(2, Number(cMembers)) : 4,
-      pickupPlaceName: cPickup || "장소 미정",
-      pickupExpectedTime: cTime || "시간 미정",
-      splitMethod: cSplit.trim() || "참여 인원 기준 1/N 소분",
-      recruitmentDeadline: buildDeadlineIso(cDeadlineDate, cDeadlineTime)
-    };
-
     if (isFirebaseConfigured()) {
       try {
-        if (editingId) {
-          await updateGongguDoc(editingId, { ...payload, imageUris: cPhotos });
-        } else {
-          await createGongguDoc({ ...payload, imageUris: cPhotos }, currentUser);
-        }
-      } catch {
-        showToast(
-          editingId ? "공구 수정에 실패했어요. 다시 시도해주세요." : "공구 생성에 실패했어요. 다시 시도해주세요."
+        await createGongguDoc(
+          {
+            title: `${createCat} 공구`,
+            totalPrice: Number(cTotal) || 0,
+            targetParticipants: Number(cMembers) || 4,
+            pickupPlaceName: cPickup || "장소 미정",
+            pickupExpectedTime: cTime || "시간 미정"
+          },
+          currentUser
         );
-        return;
-      }
-    }
-
-    setEditingGongguId(null);
-    resetCreateForm();
-    if (editingId) {
-      go("detail");
-      showToast("공구가 수정됐어요!");
-    } else {
-      go("home", "home");
-      showToast("공구가 게시됐어요! 🎉");
-    }
-  }
-
-  /* 방장이 공구를 삭제(종료): 목록에서 사라지고, 채팅방은 종료 안내 메시지와 함께 읽기 전용이 된다 */
-  async function handleDeleteGonggu() {
-    if (!selectedId) return;
-    if (isFirebaseConfigured()) {
-      try {
-        await cancelGongguDoc(selectedId);
       } catch {
-        showToast("공구 삭제에 실패했어요. 다시 시도해주세요.");
+        showToast("공구 생성에 실패했어요. 다시 시도해주세요.");
         return;
       }
     }
-    setShowDeleteConfirm(false);
-    setShowHostLeaveConfirm(false);
     go("home", "home");
-    showToast("공구가 삭제됐어요.");
-  }
-
-  /* 방장이 모집 중인 공구방에서 "나가기": 공구 삭제 + 본인 채팅 목록에서 숨기기를 한 번에 처리 */
-  async function handleHostLeaveGonggu() {
-    if (!selectedId) return;
-    if (isFirebaseConfigured()) {
-      try {
-        await cancelGongguDoc(selectedId, { hideForHost: true });
-      } catch {
-        showToast("나가기에 실패했어요. 다시 시도해주세요.");
-        return;
-      }
-    }
-    setLeftChatIds((prev) => Array.from(new Set([...prev, selectedId])));
-    setShowHostLeaveConfirm(false);
-    go("chatList", "chat");
-    showToast("공구방에서 나갔어요.");
-  }
-
-  /* 참여자가 공구방을 나가기: 참여 취소 + (모집중/모집완료인 경우) 모집 인원 감소 */
-  async function handleLeaveGonggu() {
-    if (!selectedId) return;
-    if (isFirebaseConfigured()) {
-      try {
-        await cancelParticipationDoc(selectedId, currentUser);
-      } catch {
-        showToast("나가기에 실패했어요. 다시 시도해주세요.");
-        return;
-      }
-    }
-    setJoined((prev) => prev.filter((id) => id !== selectedId));
-    setLeftChatIds((prev) => Array.from(new Set([...prev, selectedId])));
-    setShowLeaveConfirm(false);
-    go("chatList", "chat");
-    showToast("공구방에서 나갔어요.");
-  }
-
-  /* 방장이 이미 종료된 공구의 채팅방에서 나가기: hostHidden 플래그를 켜서 새로고침 후에도 목록에서 계속 숨긴다 */
-  async function handleLeaveClosedChat() {
-    if (!selectedId) return;
-    if (isFirebaseConfigured()) {
-      try {
-        await hideGongguChatDoc(selectedId);
-      } catch {
-        showToast("나가기에 실패했어요. 다시 시도해주세요.");
-        return;
-      }
-    }
-    setLeftChatIds((prev) => Array.from(new Set([...prev, selectedId])));
-    go("chatList", "chat");
+    showToast("공구가 게시됐어요! 🎉");
   }
 
   async function handleReview(comment: string) {
@@ -691,13 +477,13 @@ export function GongguMateApp() {
     showToast("후기가 등록됐어요. 고마워요!");
   }
 
-  const showNav = (["home", "map", "chatList", "mypage"] as Screen[]).includes(screen);
+  const showNav = (["home", "map", "chat", "mypage"] as Screen[]).includes(screen);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor={t.card} translucent={false} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "android" ? "height" : "padding"}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? 0 : 0}
         style={styles.flex}
       >
@@ -736,7 +522,7 @@ export function GongguMateApp() {
 
             {screen === "home" && (
               <HomeScreen
-                deals={browsableDeals}
+                deals={deals}
                 filter={homeFilter}
                 onFilter={setHomeFilter}
                 onOpen={openDeal}
@@ -745,7 +531,7 @@ export function GongguMateApp() {
 
             {screen === "map" && (
               <MapScreen
-                deals={browsableDeals}
+                deals={deals}
                 mapSel={mapSel}
                 pick={mapPick}
                 onPickMarker={setMapSel}
@@ -759,8 +545,7 @@ export function GongguMateApp() {
                 deal={sel}
                 hearted={hearts.includes(sel.id)}
                 joined={joined.includes(sel.id)}
-                isHost={sel.hostUserId === currentUser.id}
-                onBack={() => goToTabRoot()}
+                onBack={() => go(tab)}
                 onHeart={() =>
                   setHearts((prev) =>
                     prev.includes(sel.id) ? prev.filter((x) => x !== sel.id) : [...prev, sel.id]
@@ -770,32 +555,15 @@ export function GongguMateApp() {
                   if (joined.includes(sel.id)) go("chat");
                   else setShowJoin(true);
                 }}
-                onEdit={startEdit}
-                onDelete={() => setShowDeleteConfirm(true)}
               />
-            )}
-
-            {screen === "chatList" && (
-              <ChatListScreen chats={myChats} onSelect={openChatRoom} />
             )}
 
             {screen === "chat" && sel && (
               <ChatScreen
                 deal={sel}
                 messages={chatMsgs}
-                onBack={() => go("chatList", "chat")}
+                onBack={() => go(tab)}
                 onSend={sendMessage}
-                onOpenDetail={() => openDeal(sel.id)}
-                onLeave={() => {
-                  const isHost = sel.hostUserId === currentUser.id;
-                  if (isHost && sel.closed) {
-                    void handleLeaveClosedChat();
-                  } else if (isHost) {
-                    setShowHostLeaveConfirm(true);
-                  } else {
-                    setShowLeaveConfirm(true);
-                  }
-                }}
               />
             )}
 
@@ -803,28 +571,16 @@ export function GongguMateApp() {
               <CreateScreen
                 cat={createCat}
                 onCat={setCreateCat}
-                title={cTitle}
-                onTitleChange={setCTitle}
                 total={cTotal}
                 members={cMembers}
                 pickup={cPickup}
                 time={cTime}
-                split={cSplit}
-                photos={cPhotos}
-                deadlineDate={cDeadlineDate}
-                deadlineTime={cDeadlineTime}
                 onTotal={setCTotal}
                 onMembers={setCMembers}
                 onPickup={setCPickup}
                 onTime={setCTime}
-                onSplitChange={setCSplit}
-                onAddPhoto={pickPhoto}
-                onRemovePhoto={removePhoto}
-                onDeadlineDate={setCDeadlineDate}
-                onDeadlineTime={setCDeadlineTime}
-                onBack={() => exitCreateScreen()}
+                onBack={() => go(tab)}
                 onPost={handleCreate}
-                editing={editingGongguId !== null}
               />
             )}
 
@@ -842,7 +598,16 @@ export function GongguMateApp() {
               <MyPageScreen
                 nickname={currentUser.nickname}
                 notif={notif}
-                onToggle={(key) => setNotif((prev) => ({ ...prev, [key]: !prev[key] }))}
+                onToggle={(key) => {
+                  setNotif((prev) => {
+                    const next = { ...prev, [key]: !prev[key] } as NotifSettings;
+                    const uid = auth.user?.uid;
+                    if (uid && !auth.user?.isAnonymous) {
+                      void saveNotifSettings(uid, next);
+                    }
+                    return next;
+                  });
+                }}
                 onReviewDemo={() => {
                   if (deals.length > 0) setSelectedId(deals[0]!.id);
                   setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
@@ -854,51 +619,17 @@ export function GongguMateApp() {
 
           {showNav && (
             <BottomNav
-              active={tab}
+              active={screen as MainTab}
               onHome={() => go("home", "home")}
               onMap={() => go("map", "map")}
-              onCreate={() => {
-                setEditingGongguId(null);
-                resetCreateForm();
-                setScreen("create");
-              }}
-              onChat={() => go("chatList", "chat")}
+              onCreate={() => setScreen("create")}
+              onChat={() => go("chat", "chat")}
               onMy={() => go("mypage", "mypage")}
             />
           )}
 
           {showJoin && sel && (
             <JoinSheet deal={sel} onClose={() => setShowJoin(false)} onConfirm={confirmJoin} />
-          )}
-
-          {showDeleteConfirm && sel && (
-            <ConfirmModal
-              title="공구를 삭제할까요?"
-              description={"삭제하면 공구방이 목록에서 사라지고\n참여자와의 채팅방은 종료돼요."}
-              confirmLabel="삭제하기"
-              onCancel={() => setShowDeleteConfirm(false)}
-              onConfirm={() => void handleDeleteGonggu()}
-            />
-          )}
-
-          {showLeaveConfirm && sel && (
-            <ConfirmModal
-              title="공구방을 나갈까요?"
-              description={"나가면 참여가 취소되고\n채팅방에서 더 이상 메시지를 볼 수 없어요."}
-              confirmLabel="나가기"
-              onCancel={() => setShowLeaveConfirm(false)}
-              onConfirm={() => void handleLeaveGonggu()}
-            />
-          )}
-
-          {showHostLeaveConfirm && sel && (
-            <ConfirmModal
-              title="공구방이 삭제됩니다"
-              description={"방장이 나가면 공구방이 삭제되고\n참여자와의 채팅방도 함께 종료돼요.\n그래도 나가시겠습니까?"}
-              confirmLabel="나가기"
-              onCancel={() => setShowHostLeaveConfirm(false)}
-              onConfirm={() => void handleHostLeaveGonggu()}
-            />
           )}
 
           {!!toast && (
@@ -1463,14 +1194,7 @@ function HomeScreen({
   onFilter: (f: string) => void;
   onOpen: (id: string) => void;
 }) {
-  const [showSearch, setShowSearch] = useState(false);
-  const [query, setQuery] = useState("");
-
-  const visible = deals.filter((d) => {
-    if (filter !== "전체" && d.cat !== filter) return false;
-    if (query.trim() && !d.title.includes(query.trim())) return false;
-    return true;
-  });
+  const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
 
   return (
     <View style={styles.flex}>
@@ -1480,13 +1204,8 @@ function HomeScreen({
           <Text style={styles.chevron}>⌄</Text>
         </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
-          <Pressable
-            onPress={() => {
-              setShowSearch((prev) => !prev);
-              setQuery("");
-            }}
-          >
-            <SearchIcon size={20} color={showSearch ? t.rose : t.ink} />
+          <Pressable>
+            <SearchIcon size={20} color={t.ink} />
           </Pressable>
           <View>
             <Pressable>
@@ -1496,25 +1215,6 @@ function HomeScreen({
           </View>
         </View>
       </View>
-
-      {showSearch && (
-        <View style={styles.searchBar}>
-          <SearchIcon size={16} color={t.dim} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="공구 이름으로 검색"
-            placeholderTextColor={t.dim}
-            style={styles.searchInput}
-            autoFocus
-          />
-          {!!query && (
-            <Pressable onPress={() => setQuery("")}>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: t.dim }}>✕</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
 
       <ScrollView
         horizontal
@@ -1536,10 +1236,7 @@ function HomeScreen({
                 }
               ]}
             >
-              <Text
-                numberOfLines={1}
-                style={{ fontSize: 13, fontWeight: "600", color: active ? "#fff" : t.chipInk }}
-              >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: active ? "#fff" : t.chipInk }}>
                 {label}
               </Text>
             </Pressable>
@@ -1547,7 +1244,7 @@ function HomeScreen({
         })}
       </ScrollView>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.dealList}>
+      <ScrollView contentContainerStyle={styles.dealList}>
         {visible.map((d) => (
           <DealCard key={d.id} deal={d} onPress={() => onOpen(d.id)} />
         ))}
@@ -1560,9 +1257,6 @@ function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void }) {
   return (
     <Pressable style={styles.dealCard} onPress={onPress}>
       <View style={[styles.dealThumb, { backgroundColor: deal.tint }]}>
-        {deal.images[0] && (
-          <Image source={{ uri: deal.images[0] }} style={StyleSheet.absoluteFill} />
-        )}
         <View style={styles.thumbTag}>
           <Text style={styles.thumbTagText}>{deal.cat}</Text>
         </View>
@@ -1590,7 +1284,7 @@ function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void }) {
         <Text style={styles.dealTitle} numberOfLines={1}>
           {deal.title}
         </Text>
-        {!!deal.store && <Text style={styles.dealStore}>{deal.store}</Text>}
+        <Text style={styles.dealStore}>{deal.store}</Text>
         <View style={{ marginTop: 6 }}>
           <View style={[styles.rowBetween, { marginBottom: 5 }]}>
             <Text style={styles.dealPrice}>1인 {fmt(per(deal))}</Text>
@@ -1719,51 +1413,25 @@ function DetailScreen({
   deal,
   hearted,
   joined,
-  isHost,
   onBack,
   onHeart,
-  onCta,
-  onEdit,
-  onDelete
+  onCta
 }: {
   deal: Deal;
   hearted: boolean;
   joined: boolean;
-  isHost: boolean;
   onBack: () => void;
   onHeart: () => void;
   onCta: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
 }) {
-  const closedAndNotJoined = deal.closed && !joined;
-  const fullAndNotJoined = !deal.closed && !joined && deal.cur >= deal.max;
-
   return (
     <View style={styles.flex}>
       <ScrollView contentContainerStyle={{ paddingBottom: 12 }} stickyHeaderIndices={[]}>
         <View style={[styles.detailHero, { backgroundColor: deal.tint }]}>
-          {deal.images[0] && (
-            <Image
-              source={{ uri: deal.images[0] }}
-              resizeMode="cover"
-              style={StyleSheet.absoluteFill}
-            />
-          )}
           <Pressable style={styles.detailBack} onPress={onBack}>
             <Text style={styles.backArrow}>‹</Text>
           </Pressable>
-          {isHost && !deal.closed && (
-            <View style={styles.detailHostActions}>
-              <Pressable style={styles.detailActionButton} onPress={onEdit}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>수정</Text>
-              </Pressable>
-              <Pressable style={styles.detailActionButton} onPress={onDelete}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>삭제</Text>
-              </Pressable>
-            </View>
-          )}
-          {!deal.images[0] && <Text style={styles.detailHeroLabel}>[ 상품 사진 ]</Text>}
+          <Text style={styles.detailHeroLabel}>[ 상품 사진 ]</Text>
         </View>
 
         <View style={styles.detailSheet}>
@@ -1791,7 +1459,7 @@ function DetailScreen({
 
           <Text style={styles.detailTitle}>{deal.title}</Text>
           <Text style={styles.dealStore}>
-            {deal.store ? `${deal.store} · ${deal.dist}` : deal.dist}
+            {deal.store} · {deal.dist}
           </Text>
 
           {/* price card */}
@@ -1863,30 +1531,9 @@ function DetailScreen({
             {hearted ? "♥" : "♡"}
           </Text>
         </Pressable>
-        <Pressable
-          style={[
-            styles.ctaButton,
-            (isHost || closedAndNotJoined || fullAndNotJoined) && { backgroundColor: t.border }
-          ]}
-          onPress={onCta}
-          disabled={isHost || closedAndNotJoined || fullAndNotJoined}
-        >
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "700",
-              color: isHost || closedAndNotJoined || fullAndNotJoined ? t.dim : "#fff"
-            }}
-          >
-            {isHost
-              ? "참여완료"
-              : closedAndNotJoined
-                ? "종료된 공구예요"
-                : fullAndNotJoined
-                  ? "모집완료"
-                  : joined
-                    ? "채팅방 입장하기"
-                    : "참여하기"}
+        <Pressable style={styles.ctaButton} onPress={onCta}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
+            {joined ? "채팅방 입장하기" : "참여하기"}
           </Text>
         </Pressable>
       </View>
@@ -1920,59 +1567,6 @@ function GradientBar({ ratio, knobColor }: { ratio: number; knobColor: string })
   );
 }
 
-function ChatListScreen({
-  chats,
-  onSelect
-}: {
-  chats: Array<{ deal: Deal; isHost: boolean }>;
-  onSelect: (dealId: string) => void;
-}) {
-  return (
-    <View style={styles.flex}>
-      <View style={styles.simpleHeader}>
-        <Text style={styles.simpleHeaderTitle}>채팅</Text>
-      </View>
-
-      {chats.length === 0 ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 6 }}>
-          <Text style={{ fontSize: 14, color: t.muted }}>아직 참여 중인 공구방이 없어요</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.flex} contentContainerStyle={styles.dealList}>
-          {chats.map(({ deal, isHost }) => (
-            <Pressable key={deal.id} style={styles.dealCard} onPress={() => onSelect(deal.id)}>
-              <View style={[styles.dealThumb, { backgroundColor: deal.tint }]}>
-                {deal.images[0] && (
-                  <Image source={{ uri: deal.images[0] }} style={StyleSheet.absoluteFill} />
-                )}
-                <View style={styles.thumbTag}>
-                  <Text style={styles.thumbTagText}>{deal.cat}</Text>
-                </View>
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.dealTitle} numberOfLines={1}>
-                    {deal.title}
-                  </Text>
-                  {isHost && (
-                    <View style={[styles.tagPill, { backgroundColor: t.roseSoft }]}>
-                      <Text style={{ fontSize: 11, fontWeight: "700", color: t.rose }}>방장</Text>
-                    </View>
-                  )}
-                </View>
-                {!!deal.store && <Text style={styles.dealStore}>{deal.store}</Text>}
-                <Text style={{ fontSize: 12, color: t.muted, marginTop: 4 }}>
-                  참여자 {memberStr(deal)} · {statusOf(deal)}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Chat                                                                */
 /* ------------------------------------------------------------------ */
@@ -1981,22 +1575,17 @@ function ChatScreen({
   deal,
   messages,
   onBack,
-  onSend,
-  onOpenDetail,
-  onLeave
+  onSend
 }: {
   deal: Deal;
   messages: ChatMsg[];
   onBack: () => void;
   onSend: (text: string) => void;
-  onOpenDetail: () => void;
-  onLeave: () => void;
 }) {
   const [input, setInput] = useState("");
-  const closed = deal.closed;
 
   function submit() {
-    if (closed || !input.trim()) return;
+    if (!input.trim()) return;
     onSend(input);
     setInput("");
   }
@@ -2007,30 +1596,16 @@ function ChatScreen({
         <Pressable onPress={onBack} style={{ padding: 4 }}>
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
-        <Pressable
-          onPress={onOpenDetail}
-          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}
-        >
-          <View style={[styles.chatHeaderThumb, { backgroundColor: deal.tint, overflow: "hidden" }]}>
-            {deal.images[0] && (
-              <Image source={{ uri: deal.images[0] }} style={StyleSheet.absoluteFill} />
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }} numberOfLines={1}>
-              {deal.title}
-            </Text>
-            <Text style={{ fontSize: 12, color: t.muted }}>참여자 {memberStr(deal)}</Text>
-          </View>
-        </Pressable>
-        <View style={[styles.tagPill, { backgroundColor: closed ? t.calmBg : t.roseSoft }]}>
-          <Text style={{ fontSize: 11, fontWeight: "700", color: closed ? t.chipInk : t.rose }}>
-            {statusOf(deal)}
+        <View style={[styles.chatHeaderThumb, { backgroundColor: deal.tint }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }} numberOfLines={1}>
+            {deal.title}
           </Text>
+          <Text style={{ fontSize: 12, color: t.muted }}>참여자 {memberStr(deal)}</Text>
         </View>
-        <Pressable onPress={onLeave} style={{ paddingHorizontal: 2, paddingVertical: 4 }}>
-          <Text style={{ fontSize: 12, fontWeight: "700", color: t.muted }}>나가기</Text>
-        </Pressable>
+        <View style={[styles.tagPill, { backgroundColor: t.roseSoft }]}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: t.rose }}>{statusOf(deal)}</Text>
+        </View>
       </View>
 
       <ScrollView style={styles.chatBody} contentContainerStyle={{ padding: 14, gap: 10 }}>
@@ -2055,7 +1630,7 @@ function ChatScreen({
                 {!isMe && <Text style={styles.msgName}>{m.name}</Text>}
                 <View
                   style={{
-                    flexDirection: isMe ? "row-reverse" : "row",
+                    flexDirection: isMe ? "row" : "row-reverse",
                     alignItems: "flex-end",
                     gap: 6
                   }}
@@ -2079,112 +1654,20 @@ function ChatScreen({
       </ScrollView>
 
       <View style={styles.composer}>
-        <View style={[styles.composerInputWrap, closed && { backgroundColor: t.line }]}>
+        <View style={styles.composerInputWrap}>
           <TextInput
             value={input}
             onChangeText={setInput}
-            editable={!closed}
-            placeholder={closed ? "종료된 공구방이에요" : "메시지 보내기"}
+            placeholder="메시지 보내기"
             placeholderTextColor={t.dim}
             style={styles.composerInput}
             onSubmitEditing={submit}
             returnKeyType="send"
           />
         </View>
-        <Pressable
-          style={[styles.sendButton, closed && { backgroundColor: t.dim }]}
-          onPress={submit}
-          disabled={closed}
-        >
+        <Pressable style={styles.sendButton} onPress={submit}>
           <SendArrowIcon size={16} color="#fff" />
         </Pressable>
-      </View>
-    </View>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Calendar picker                                                     */
-/* ------------------------------------------------------------------ */
-
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-
-function CalendarPicker({
-  selectedDate,
-  onSelect
-}: {
-  selectedDate: string;
-  onSelect: (date: string) => void;
-}) {
-  const selected = new Date(selectedDate);
-  const [viewYear, setViewYear] = useState(selected.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selected.getMonth());
-
-  const todayStr = toDateStr(new Date());
-  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-
-  function shiftMonth(delta: number) {
-    const d = new Date(viewYear, viewMonth + delta, 1);
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
-  }
-
-  const cells: Array<{ day: number; dateStr: string } | null> = [];
-  for (let i = 0; i < firstWeekday; i++) cells.push(null);
-  for (let day = 1; day <= daysInMonth; day++) {
-    cells.push({ day, dateStr: toDateStr(new Date(viewYear, viewMonth, day)) });
-  }
-
-  return (
-    <View style={styles.calendarWrap}>
-      <View style={styles.calendarHeader}>
-        <Pressable onPress={() => shiftMonth(-1)} style={styles.calendarNavButton}>
-          <Text style={styles.calendarNavArrow}>‹</Text>
-        </Pressable>
-        <Text style={styles.calendarHeaderTitle}>
-          {viewYear}년 {viewMonth + 1}월
-        </Text>
-        <Pressable onPress={() => shiftMonth(1)} style={styles.calendarNavButton}>
-          <Text style={styles.calendarNavArrow}>›</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.calendarWeekRow}>
-        {WEEKDAYS.map((w) => (
-          <Text key={w} style={styles.calendarWeekday}>
-            {w}
-          </Text>
-        ))}
-      </View>
-
-      <View style={styles.calendarGrid}>
-        {cells.map((cell, i) => {
-          if (!cell) return <View key={i} style={styles.calendarCell} />;
-          const isPast = cell.dateStr < todayStr;
-          const isSelected = cell.dateStr === selectedDate;
-          const isToday = cell.dateStr === todayStr;
-          return (
-            <Pressable
-              key={cell.dateStr}
-              disabled={isPast}
-              onPress={() => onSelect(cell.dateStr)}
-              style={styles.calendarCell}
-            >
-              <View style={[styles.calendarDayCircle, isSelected && { backgroundColor: t.pink }]}>
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: isSelected || isToday ? "700" : "500",
-                    color: isPast ? t.dim : isSelected ? "#fff" : t.ink
-                  }}
-                >
-                  {cell.day}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
       </View>
     </View>
   );
@@ -2197,77 +1680,31 @@ function CalendarPicker({
 function CreateScreen({
   cat,
   onCat,
-  title,
-  onTitleChange,
   total,
   members,
   pickup,
   time,
-  split,
-  photos,
-  deadlineDate,
-  deadlineTime,
   onTotal,
   onMembers,
   onPickup,
   onTime,
-  onSplitChange,
-  onAddPhoto,
-  onRemovePhoto,
-  onDeadlineDate,
-  onDeadlineTime,
   onBack,
-  onPost,
-  editing
+  onPost
 }: {
   cat: string;
   onCat: (c: string) => void;
-  title: string;
-  onTitleChange: (v: string) => void;
   total: string;
   members: string;
   pickup: string;
   time: string;
-  split: string;
-  photos: string[];
-  deadlineDate: string;
-  deadlineTime: string;
   onTotal: (v: string) => void;
   onMembers: (v: string) => void;
   onPickup: (v: string) => void;
   onTime: (v: string) => void;
-  onSplitChange: (v: string) => void;
-  onAddPhoto: () => void | Promise<void>;
-  onRemovePhoto: (uri: string) => void;
-  onDeadlineDate: (date: string) => void;
-  onDeadlineTime: (time: string) => void;
   onBack: () => void;
   onPost: () => void | Promise<void>;
-  editing?: boolean;
 }) {
-  const totalInputRef = useRef<TextInput>(null);
-  const membersInputRef = useRef<TextInput>(null);
-  const [showDeadlineSheet, setShowDeadlineSheet] = useState(false);
-  const [hourDraft, setHourDraft] = useState(deadlineTime.split(":")[0] ?? "23");
-  const [minuteDraft, setMinuteDraft] = useState(deadlineTime.split(":")[1] ?? "59");
   const perPerson = fmt(Math.ceil((Number(total) || 0) / (Number(members) || 1)));
-
-  function openDeadlineSheet() {
-    setHourDraft(deadlineTime.split(":")[0] ?? "23");
-    setMinuteDraft(deadlineTime.split(":")[1] ?? "59");
-    setShowDeadlineSheet(true);
-  }
-
-  /* 입력 중엔 자유롭게 타이핑하게 두고, 포커스를 벗어날 때만 범위를 clamp+pad해서 반영한다 */
-  function commitDeadlineTime() {
-    const hh = Math.min(23, Number(hourDraft.replace(/[^0-9]/g, "")) || 0);
-    const mm = Math.min(59, Number(minuteDraft.replace(/[^0-9]/g, "")) || 0);
-    const hPad = String(hh).padStart(2, "0");
-    const mPad = String(mm).padStart(2, "0");
-    setHourDraft(hPad);
-    setMinuteDraft(mPad);
-    onDeadlineTime(`${hPad}:${mPad}`);
-  }
 
   return (
     <View style={styles.flex}>
@@ -2275,37 +1712,24 @@ function CreateScreen({
         <Pressable onPress={onBack} style={{ padding: 4 }}>
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
-        <Text style={styles.simpleHeaderTitle}>{editing ? "공구 수정하기" : "공구 만들기"}</Text>
+        <Text style={styles.simpleHeaderTitle}>공구 만들기</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.createBody}>
         <View>
           <Text style={styles.fieldLabel}>상품 사진</Text>
-          <View style={{ flexDirection: "row", gap: 9, marginTop: 9, flexWrap: "wrap" }}>
-            {photos.length < 5 && (
-              <Pressable style={styles.photoAdd} onPress={onAddPhoto}>
-                <CameraIcon size={22} color={t.dim} />
-                <Text style={{ fontSize: 11, fontWeight: "600", color: t.dim }}>
-                  {photos.length}/5
-                </Text>
-              </Pressable>
-            )}
-            {photos.map((uri) => (
-              <Pressable key={uri} onPress={() => onRemovePhoto(uri)}>
-                <Image source={{ uri }} style={styles.photoThumb} />
-                <View style={styles.photoRemoveBadge}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>✕</Text>
-                </View>
-              </Pressable>
-            ))}
+          <View style={{ flexDirection: "row", gap: 9, marginTop: 9 }}>
+            <Pressable style={styles.photoAdd}>
+              <CameraIcon size={22} color={t.dim} />
+              <Text style={{ fontSize: 11, fontWeight: "600", color: t.dim }}>0/5</Text>
+            </Pressable>
+            <View style={[styles.photoThumb, { backgroundColor: "#EDDEE3" }]} />
           </View>
         </View>
 
         <View>
           <Text style={styles.fieldLabel}>상품명</Text>
           <TextInput
-            value={title}
-            onChangeText={onTitleChange}
             placeholder="예) 코스트코 크루아상 24개입"
             placeholderTextColor={t.dim}
             style={styles.createInput}
@@ -2343,32 +1767,27 @@ function CreateScreen({
         <View style={{ flexDirection: "row", gap: 11 }}>
           <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>총 가격</Text>
-            <Pressable style={styles.suffixField} onPress={() => totalInputRef.current?.focus()}>
+            <View style={styles.suffixField}>
               <TextInput
-                ref={totalInputRef}
                 value={total}
-                onChangeText={(v) => onTotal(v.replace(/[^0-9]/g, ""))}
+                onChangeText={onTotal}
                 keyboardType="number-pad"
                 style={styles.suffixInput}
               />
               <Text style={styles.suffix}>원</Text>
-            </Pressable>
+            </View>
           </View>
           <View style={{ width: 108 }}>
             <Text style={styles.fieldLabel}>모집 인원</Text>
-            <Pressable style={styles.suffixField} onPress={() => membersInputRef.current?.focus()}>
+            <View style={styles.suffixField}>
               <TextInput
-                ref={membersInputRef}
                 value={members}
-                onChangeText={(v) => onMembers(v.replace(/[^0-9]/g, ""))}
-                onBlur={() => {
-                  if (Number(members) < 2) onMembers("2");
-                }}
+                onChangeText={onMembers}
                 keyboardType="number-pad"
                 style={styles.suffixInput}
               />
               <Text style={styles.suffix}>명</Text>
-            </Pressable>
+            </View>
           </View>
         </View>
 
@@ -2401,22 +1820,8 @@ function CreateScreen({
         </View>
 
         <View>
-          <Text style={styles.fieldLabel}>공구 마감 시간</Text>
-          <Pressable style={styles.createInput} onPress={openDeadlineSheet}>
-            <Text style={{ fontSize: 14, color: t.ink, lineHeight: 44 }}>
-              {formatDateLabel(deadlineDate)} {deadlineTime}
-            </Text>
-          </Pressable>
-          <Text style={{ fontSize: 12, color: t.muted, marginTop: 6 }}>
-            {formatDeadline(buildDeadlineIso(deadlineDate, deadlineTime))}
-          </Text>
-        </View>
-
-        <View>
           <Text style={styles.fieldLabel}>소분 방법</Text>
           <TextInput
-            value={split}
-            onChangeText={onSplitChange}
             placeholder="예) 1인 4개씩 나눠가져요"
             placeholderTextColor={t.dim}
             style={styles.createInput}
@@ -2426,63 +1831,9 @@ function CreateScreen({
 
       <View style={styles.stickyFooter}>
         <Pressable style={[styles.footerButton, { backgroundColor: t.pink }]} onPress={onPost}>
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-            {editing ? "수정 완료" : "공구 게시하기"}
-          </Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>공구 게시하기</Text>
         </Pressable>
       </View>
-
-      {showDeadlineSheet && (
-        <Pressable
-          style={styles.sheetBackdrop}
-          onPress={() => {
-            commitDeadlineTime();
-            setShowDeadlineSheet(false);
-          }}
-        >
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <View style={styles.sheetGrabber} />
-            <Text style={{ fontSize: 17, fontWeight: "800", color: t.ink }}>공구 마감 시간</Text>
-
-            <CalendarPicker selectedDate={deadlineDate} onSelect={onDeadlineDate} />
-
-            <View style={{ flexDirection: "row", gap: 11, marginTop: 16 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>시</Text>
-                <TextInput
-                  value={hourDraft}
-                  onChangeText={(v) => setHourDraft(v.replace(/[^0-9]/g, "").slice(0, 2))}
-                  onBlur={commitDeadlineTime}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  style={styles.createInput}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>분</Text>
-                <TextInput
-                  value={minuteDraft}
-                  onChangeText={(v) => setMinuteDraft(v.replace(/[^0-9]/g, "").slice(0, 2))}
-                  onBlur={commitDeadlineTime}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  style={styles.createInput}
-                />
-              </View>
-            </View>
-
-            <Pressable
-              style={[styles.pillButton, { backgroundColor: t.pink, marginTop: 16 }]}
-              onPress={() => {
-                commitDeadlineTime();
-                setShowDeadlineSheet(false);
-              }}
-            >
-              <Text style={[styles.pillButtonText, { color: "#fff" }]}>완료</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -2799,37 +2150,6 @@ function JoinSheet({
   );
 }
 
-function ConfirmModal({
-  title,
-  description,
-  confirmLabel,
-  onCancel,
-  onConfirm
-}: {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <Pressable style={styles.modalBackdrop} onPress={onCancel}>
-      <Pressable style={styles.confirmModal} onPress={() => {}}>
-        <Text style={styles.confirmModalTitle}>{title}</Text>
-        <Text style={styles.confirmModalDesc}>{description}</Text>
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
-          <Pressable style={[styles.confirmModalButton, { backgroundColor: t.bg }]} onPress={onCancel}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: t.chipInk }}>취소</Text>
-          </Pressable>
-          <Pressable style={[styles.confirmModalButton, { backgroundColor: t.rose }]} onPress={onConfirm}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff" }}>{confirmLabel}</Text>
-          </Pressable>
-        </View>
-      </Pressable>
-    </Pressable>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Styles                                                              */
 /* ------------------------------------------------------------------ */
@@ -2884,7 +2204,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 10
   },
-  nickInput: { flex: 1, minWidth: 0, fontSize: 20, fontWeight: "600", color: t.ink, padding: 0 },
+  nickInput: { flex: 1, fontSize: 20, fontWeight: "600", color: t.ink, padding: 0 },
   locateCircle: {
     width: 120,
     height: 120,
@@ -2935,46 +2255,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: t.rose
   },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: t.border,
-    borderRadius: 12,
-    height: 42,
-    paddingHorizontal: 13,
-    marginHorizontal: 20,
-    marginBottom: 10
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 14,
-    color: t.ink,
-    padding: 0,
-    outlineWidth: 0
-  },
-  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  chipScroll: { flexShrink: 0 },
   chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
   filterChip: {
-    height: 36,
+    paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
-    borderWidth: 1,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center"
+    borderWidth: 1
   },
-  dealList: {
-    flexGrow: 1,
-    justifyContent: "flex-start",
-    gap: 11,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 80
-  },
+  dealList: { gap: 11, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 80 },
   dealCard: {
     backgroundColor: "#fff",
     borderRadius: 18,
@@ -3004,7 +2293,7 @@ const styles = StyleSheet.create({
   },
   thumbTagText: { fontSize: 10, fontWeight: "700", color: "rgba(0,0,0,0.34)" },
   deadlinePill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  dealTitle: { fontSize: 15, fontWeight: "700", color: t.ink, marginTop: 7, lineHeight: 20 },
+  dealTitle: { fontSize: 15, fontWeight: "700", color: t.ink, marginTop: 2, lineHeight: 20 },
   dealStore: { fontSize: 12, color: t.muted, marginTop: 1 },
   dealPrice: { fontSize: 15, fontWeight: "800", color: t.rose },
   dealMeta: { fontSize: 11, fontWeight: "600", color: t.chipInk },
@@ -3109,7 +2398,7 @@ const styles = StyleSheet.create({
   },
 
   /* detail */
-  detailHero: { height: 280, justifyContent: "center", alignItems: "center", overflow: "hidden" },
+  detailHero: { height: 280, justifyContent: "center", alignItems: "center" },
   detailBack: {
     position: "absolute",
     top: 14,
@@ -3122,21 +2411,6 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   backArrow: { fontSize: 30, color: t.ink, lineHeight: 32, marginTop: -2 },
-  detailHostActions: {
-    position: "absolute",
-    top: 14,
-    right: 16,
-    flexDirection: "row",
-    gap: 8
-  },
-  detailActionButton: {
-    height: 38,
-    paddingHorizontal: 14,
-    borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    alignItems: "center",
-    justifyContent: "center"
-  },
   detailHeroLabel: { fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontSize: 13, color: "rgba(0,0,0,0.3)" },
   detailSheet: {
     flex: 1,
@@ -3271,32 +2545,6 @@ const styles = StyleSheet.create({
     gap: 3
   },
   photoThumb: { width: 72, height: 72, borderRadius: 13 },
-  photoRemoveBadge: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  calendarWrap: { marginTop: 16 },
-  calendarHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 4
-  },
-  calendarNavButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  calendarNavArrow: { fontSize: 22, color: t.ink },
-  calendarHeaderTitle: { fontSize: 15, fontWeight: "700", color: t.ink },
-  calendarWeekRow: { flexDirection: "row", marginTop: 14 },
-  calendarWeekday: { flex: 1, textAlign: "center", fontSize: 12, fontWeight: "600", color: t.muted },
-  calendarGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
-  calendarCell: { width: "14.2857%", height: 40, alignItems: "center", justifyContent: "center" },
-  calendarDayCircle: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   createInput: {
     marginTop: 8,
     height: 46,
@@ -3320,7 +2568,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff"
   },
-  suffixInput: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "600", color: t.ink, padding: 0 },
+  suffixInput: { flex: 1, fontSize: 14, fontWeight: "600", color: t.ink, padding: 0 },
   suffix: { fontSize: 13, color: t.muted },
   perPersonBox: {
     backgroundColor: t.roseSoft,
@@ -3429,30 +2677,6 @@ const styles = StyleSheet.create({
   sheetSummary: { backgroundColor: t.bg, borderRadius: 16, padding: 16, marginTop: 18, gap: 11 },
   sheetDivider: { height: 1, backgroundColor: "#E6DDE0" },
   sheetNote: { flexDirection: "row", gap: 9, backgroundColor: t.roseSoft, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 12 },
-
-  /* delete confirm modal */
-  modalBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(28,26,21,0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 28
-  },
-  confirmModal: {
-    width: "100%",
-    backgroundColor: "#fff",
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingTop: 26,
-    paddingBottom: 20
-  },
-  confirmModalTitle: { fontSize: 17, fontWeight: "800", color: t.ink, textAlign: "center" },
-  confirmModalDesc: { fontSize: 13, color: t.muted, textAlign: "center", marginTop: 10, lineHeight: 19 },
-  confirmModalButton: { flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 
   /* toast */
   toast: {
