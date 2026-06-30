@@ -57,9 +57,11 @@ export type Gonggu = {
   pickupExpectedTime: string;
   recruitmentDeadline: string;
   status: GongguStatus;
-  imageUrl: string;
+  imageUrls: string[];
   receiptVerified: boolean;
   settlementId: string;
+  /** 방장이 종료된 공구의 채팅방에서 "나가기"를 눌러 본인 채팅 목록에서 숨긴 경우 true. */
+  hostHidden?: boolean;
 };
 
 export type Participation = {

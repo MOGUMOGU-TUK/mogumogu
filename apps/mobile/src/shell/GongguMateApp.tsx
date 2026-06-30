@@ -1,7 +1,9 @@
+import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,7 +22,12 @@ import { useChatMessages } from "../features/chat/useChatMessages";
 import { useFirestoreData } from "../features/data/useFirestoreData";
 import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
-import { createGongguDoc } from "../services/firebase/gongguRepository";
+import {
+  cancelGongguDoc,
+  createGongguDoc,
+  hideGongguChatDoc,
+  updateGongguDoc
+} from "../services/firebase/gongguRepository";
 import {
   initNotifications,
   loadNotifSettings,
@@ -28,6 +35,7 @@ import {
   type NotifSettings
 } from "../services/firebase/notificationService";
 import {
+  cancelParticipationDoc,
   joinGongguDoc,
   submitReviewDoc
 } from "../services/firebase/participationRepository";

@@ -13,6 +13,8 @@ const GONGGUS = "gonggus";
 const PARTICIPATIONS = "participations";
 const SETTLEMENTS = "settlements";
 const REVIEWS = "reviews";
+const CHATS = "chats";
+const MESSAGES = "messages";
 
 /** 참여 문서 id (공구 + 사용자 1:1). */
 const participationId = (gongguId: string, userId: string) => `${gongguId}__${userId}`;
@@ -51,7 +53,7 @@ export function subscribeReviews(onChange: (items: Review[]) => void): () => voi
 
 // ─── 쓰기 (규칙 완화로 클라이언트가 직접 수행) ──────────────────────
 
-/** 공구 참여: 참여 문서 생성 + 공구 인원/상태 갱신. (제2항 흐름의 단순 계산) */
+/** 공구 참여: 참여 문서 생성 + 공구 인원/상태 갱신 + 채팅방 입장 안내 메시지. (제2항 흐름의 단순 계산) */
 export async function joinGongguDoc(gongguId: string, user: User): Promise<void> {
   const services = getFirebaseServices();
   if (!services) {
@@ -71,6 +73,10 @@ export async function joinGongguDoc(gongguId: string, user: User): Promise<void>
     return; // 이미 참여함
   }
 
+  if (gonggu.currentParticipants >= gonggu.targetParticipants) {
+    throw new Error("모집이 완료된 공구예요.");
+  }
+
   const nextCount = Math.min(gonggu.currentParticipants + 1, gonggu.targetParticipants);
   const participation: Participation = {
     gongguId,
@@ -88,34 +94,55 @@ export async function joinGongguDoc(gongguId: string, user: User): Promise<void>
     currentParticipants: nextCount,
     status: nextCount >= gonggu.targetParticipants ? "recruited" : gonggu.status
   });
+  batch.set(doc(collection(db, CHATS, gongguId, MESSAGES)), {
+    gongguId,
+    senderId: "system",
+    senderName: "mogumogu",
+    text: `${user.nickname}님이 들어왔습니다.`,
+    messageType: "system",
+    createdAt: new Date().toISOString()
+  });
   await batch.commit();
 }
 
-/** 참여 취소: 참여 문서 삭제 + 공구 인원 감소. */
-export async function cancelParticipationDoc(gongguId: string, userId: string): Promise<void> {
+/**
+ * 공구방 나가기: 참여 문서를 삭제하고 채팅방에 퇴장 안내 메시지를 남긴다.
+ * 모집중/모집완료 상태였다면 모집 인원도 함께 줄인다 (이미 픽업이 진행된 공구는 인원을 건드리지 않는다).
+ */
+export async function cancelParticipationDoc(gongguId: string, user: User): Promise<void> {
   const services = getFirebaseServices();
   if (!services) {
     throw new Error("Firebase가 설정되지 않았습니다.");
   }
   const { db } = services;
 
-  const partRef = doc(db, PARTICIPATIONS, participationId(gongguId, userId));
+  const partRef = doc(db, PARTICIPATIONS, participationId(gongguId, user.id));
   const partSnap = await getDoc(partRef);
-  if (!partSnap.exists() || (partSnap.data() as Participation).status !== "payment_confirmed") {
+  if (!partSnap.exists()) {
     return;
   }
 
   const batch = writeBatch(db);
   batch.delete(partRef);
+  batch.set(doc(collection(db, CHATS, gongguId, MESSAGES)), {
+    gongguId,
+    senderId: "system",
+    senderName: "mogumogu",
+    text: `${user.nickname}님이 나갔습니다.`,
+    messageType: "system",
+    createdAt: new Date().toISOString()
+  });
 
   const gongguRef = doc(db, GONGGUS, gongguId);
   const gongguSnap = await getDoc(gongguRef);
   if (gongguSnap.exists()) {
     const gonggu = gongguSnap.data() as Gonggu;
-    batch.update(gongguRef, {
-      currentParticipants: Math.max(0, gonggu.currentParticipants - 1),
-      status: "recruiting"
-    });
+    if (gonggu.status === "recruiting" || gonggu.status === "recruited") {
+      batch.update(gongguRef, {
+        currentParticipants: Math.max(0, gonggu.currentParticipants - 1),
+        status: "recruiting"
+      });
+    }
   }
   await batch.commit();
 }
