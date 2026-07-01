@@ -49,7 +49,7 @@ export type CreateGongguInput = {
   title: string;
   category: string;
   totalPrice: number;
-  targetParticipants: number;
+  totalQuantity: number;
   pickupPlaceName: string;
   pickupExpectedTime: string;
   splitMethod: string;
@@ -59,7 +59,7 @@ export type CreateGongguInput = {
 
 /**
  * 새 공구 + 정산 문서를 함께 생성하고 공구 문서 id 를 돌려준다.
- * 정산 1인 금액 = ceil(총액 / 목표 인원) (단순 계산).
+ * 단가 = ceil(총액 / 총 수량) (단순 계산). 확보 수량은 0에서 시작한다.
  */
 export async function createGongguDoc(input: CreateGongguInput, host: User): Promise<string> {
   const services = getFirebaseServices();
@@ -70,7 +70,8 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
 
   const gongguRef = doc(collection(db, GONGGUS));
   const settlementId = `settlement_${gongguRef.id}`;
-  const pricePerPerson = Math.ceil(input.totalPrice / input.targetParticipants);
+  const totalQuantity = Math.max(1, input.totalQuantity);
+  const unitPrice = Math.ceil(input.totalPrice / totalQuantity);
   const imageUrls = input.imageUris?.length
     ? await uploadGongguImages(storage, gongguRef.id, input.imageUris)
     : [];
@@ -84,8 +85,9 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     hostTrustScore: host.trustScore,
     purchaseStore: "",
     totalPrice: input.totalPrice,
-    targetParticipants: input.targetParticipants,
-    currentParticipants: 1,
+    totalQuantity,
+    claimedQuantity: 0,
+    currentParticipants: 0,
     splitMethod: input.splitMethod,
     pickupPlaceName: input.pickupPlaceName,
     pickupDistanceMeters: 300,
@@ -101,8 +103,8 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     gongguId: gongguRef.id,
     hostUserId: host.id,
     totalAmount: input.totalPrice,
-    pricePerPerson,
-    participantCount: input.targetParticipants,
+    unitPrice,
+    totalQuantity,
     mode: "mock",
     status: "pending",
     releaseCondition: "all_pickup_confirmed_and_reviews_completed"
@@ -123,7 +125,7 @@ export type UpdateGongguInput = {
   title: string;
   category: string;
   totalPrice: number;
-  targetParticipants: number;
+  totalQuantity: number;
   pickupPlaceName: string;
   pickupExpectedTime: string;
   splitMethod: string;
@@ -152,7 +154,7 @@ export async function updateGongguDoc(gongguId: string, input: UpdateGongguInput
     title: input.title,
     category: input.category,
     totalPrice: input.totalPrice,
-    targetParticipants: input.targetParticipants,
+    totalQuantity: Math.max(1, input.totalQuantity),
     pickupPlaceName: input.pickupPlaceName,
     pickupExpectedTime: input.pickupExpectedTime,
     splitMethod: input.splitMethod,
