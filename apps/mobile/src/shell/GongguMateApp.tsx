@@ -778,6 +778,7 @@ export function GongguMateApp() {
                 deal={sel}
                 hearted={hearts.includes(sel.id)}
                 joined={joined.includes(sel.id)}
+                isHost={sel.hostId === currentUser.id}
                 onBack={() =>
                   go(detailFrom === "notifications" ? "notifications" : tab)
                 }
