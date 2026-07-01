@@ -49,7 +49,11 @@ export type Gonggu = {
   hostTrustScore: number;
   purchaseStore: string;
   totalPrice: number;
-  targetParticipants: number;
+  /** 공구 총 수량(개). 단가 = totalPrice / totalQuantity. */
+  totalQuantity: number;
+  /** 참여자들이 지금까지 확보한 수량 합계. 진행률·모집완료의 기준. */
+  claimedQuantity: number;
+  /** 참여한 사람 수(참고용 표시). */
   currentParticipants: number;
   splitMethod: string;
   pickupPlaceName: string;
@@ -71,6 +75,10 @@ export type Participation = {
   paymentStatus: PaymentStatus;
   pickupConfirmationStatus: "pending" | "confirmed";
   reviewStatus: "required" | "completed" | "not_required";
+  /** 이 참여자가 고른 수량(개). */
+  quantity: number;
+  /** 부담 금액 = 단가 × quantity. */
+  amount: number;
   joinedAt: string;
 };
 
@@ -89,8 +97,10 @@ export type Settlement = {
   gongguId: string;
   hostUserId: string;
   totalAmount: number;
-  pricePerPerson: number;
-  participantCount: number;
+  /** 1개당 가격 = ceil(totalAmount / totalQuantity). */
+  unitPrice: number;
+  /** 공구 총 수량(개). */
+  totalQuantity: number;
   mode: "mock" | "manual" | "future_pg";
   status: SettlementStatus;
   releaseCondition: "all_pickup_confirmed_and_reviews_completed";
