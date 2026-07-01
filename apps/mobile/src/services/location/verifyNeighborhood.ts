@@ -17,10 +17,8 @@ type KakaoRegionResponse = {
   documents?: KakaoRegionDocument[];
 };
 
-const GPS_TIMEOUT_MS = 20_000;
+const GPS_TIMEOUT_MS = 10_000;
 const KAKAO_TIMEOUT_MS = 8_000;
-const CACHE_POLL_MS = 1_500;
-const CACHE_POLL_ATTEMPTS = 8;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,56 +50,63 @@ export function mapLocationError(error: unknown): string {
   ) {
     return Platform.OS === "web"
       ? "브라우저에서 위치 권한을 허용해 주세요."
-      : "위치(GPS)를 켜 주세요. 에뮬레이터면 Location에서 Set Location 후 2~3초 기다렸다가 다시 시도해 주세요.";
+      : "위치(GPS)를 켜 주세요. 에뮬레이터는 터미널에서 adb emu geo fix 경도 위도 실행 후 다시 시도해 주세요.";
   }
 
   if (message.includes("timeout") || message.includes("초과")) {
-    return "위치 확인 시간이 초과됐어요. Set Location 후 잠시 기다렸다가 다시 눌러 주세요.";
+    return "위치 확인 시간이 초과됐어요. 에뮬레이터면 adb emu geo fix 로 좌표를 넣은 뒤 다시 시도해 주세요.";
   }
 
   return message || "위치 확인에 실패했어요. 다시 시도해 주세요.";
 }
 
-/** Set Location 직후 에뮬레이터에 좌표가 반영될 때까지 잠깐 기다린다. */
+async function tryLastKnown(): Promise<{ latitude: number; longitude: number } | null> {
+  // maxAge 없이 — 에뮬레이터 mock 좌표도 받아들임
+  const cached = await Location.getLastKnownPositionAsync();
+  return cached ? cached.coords : null;
+}
+
 async function pollLastKnownPosition(): Promise<{ latitude: number; longitude: number } | null> {
-  for (let attempt = 0; attempt < CACHE_POLL_ATTEMPTS; attempt += 1) {
-    const cached = await Location.getLastKnownPositionAsync({ maxAge: 60 * 60 * 1000 });
-    if (cached) return cached.coords;
-    if (attempt < CACHE_POLL_ATTEMPTS - 1) {
-      await sleep(CACHE_POLL_MS);
-    }
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const coords = await tryLastKnown();
+    if (coords) return coords;
+    await sleep(500);
   }
   return null;
 }
 
-/** Android 에뮬레이터에서 getCurrentPosition보다 잘 동작하는 경우가 많다. */
 function watchFirstPosition(timeoutMs: number): Promise<Location.LocationObject> {
   return new Promise((resolve, reject) => {
     let subscription: Location.LocationSubscription | null = null;
+    let settled = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      void subscription?.remove();
+      fn();
+    };
 
     const timer = setTimeout(() => {
-      void subscription?.remove();
-      reject(new Error("위치 확인 시간이 초과됐어요."));
+      finish(() => reject(new Error("위치 확인 시간이 초과됐어요.")));
     }, timeoutMs);
 
     void Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Lowest,
-        timeInterval: 500,
+        timeInterval: 300,
         distanceInterval: 0
       },
       (location) => {
-        clearTimeout(timer);
-        void subscription?.remove();
-        resolve(location);
+        finish(() => resolve(location));
       }
     )
       .then((sub) => {
         subscription = sub;
       })
       .catch((error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
+        finish(() => reject(error));
       });
   });
 }
@@ -110,34 +115,29 @@ async function readCoordinates(): Promise<{ latitude: number; longitude: number 
   const cached = await pollLastKnownPosition();
   if (cached) return cached;
 
-  if (Platform.OS === "android") {
-    try {
-      return (await watchFirstPosition(GPS_TIMEOUT_MS)).coords;
-    } catch {
-      // watch 실패 시 getCurrentPosition으로 폴백
-    }
+  // getCurrentPosition — adb geo fix 후 종종 바로 됨
+  try {
+    const position = await withTimeout(
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }),
+      GPS_TIMEOUT_MS,
+      "위치 확인 시간이 초과됐어요."
+    );
+    return position.coords;
+  } catch {
+    // watch로 재시도
   }
 
-  const position = await withTimeout(
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }),
-    GPS_TIMEOUT_MS,
-    "위치 확인 시간이 초과됐어요."
-  );
-  return position.coords;
+  if (Platform.OS === "android") {
+    return (await watchFirstPosition(GPS_TIMEOUT_MS)).coords;
+  }
+
+  throw new Error("위치 확인 시간이 초과됐어요.");
 }
 
 async function getCoordinates(): Promise<{ latitude: number; longitude: number }> {
   const servicesEnabled = await Location.hasServicesEnabledAsync();
   if (!servicesEnabled) {
     throw new Error("Location provider is disabled");
-  }
-
-  if (Platform.OS === "android") {
-    try {
-      await Location.enableNetworkProviderAsync();
-    } catch {
-      // 네트워크 위치 활성화 거부
-    }
   }
 
   return readCoordinates();
