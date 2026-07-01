@@ -498,10 +498,13 @@ export function GongguMateApp() {
         await createGongguDoc(
           {
             title: `${createCat} 공구`,
+            category: createCat,
             totalPrice: Number(cTotal) || 0,
             targetParticipants: Number(cMembers) || 4,
             pickupPlaceName: cPickup || "장소 미정",
-            pickupExpectedTime: cTime || "시간 미정"
+            pickupExpectedTime: cTime || "시간 미정",
+            splitMethod: "1/N 균등 분배",
+            recruitmentDeadline: "미정"
           },
           currentUser
         );
@@ -539,7 +542,7 @@ export function GongguMateApp() {
         keyboardVerticalOffset={Platform.OS === "android" ? 0 : 0}
         style={styles.flex}
       >
-        <View style={styles.root}>
+        <View style={[styles.root, Platform.OS === "web" && styles.rootWeb]}>
           <View style={[styles.body, !showNav && { paddingBottom: insets.bottom }]}>
             {screen === "login" && (
               <LoginScreen
@@ -612,14 +615,21 @@ export function GongguMateApp() {
               />
             )}
 
-            {screen === "chat" && sel && (
-              <ChatScreen
-                deal={sel}
-                messages={chatMsgs}
-                onBack={() => go(tab)}
-                onSend={sendMessage}
-              />
-            )}
+            {screen === "chat" &&
+              (sel ? (
+                <ChatScreen
+                  deal={sel}
+                  messages={chatMsgs}
+                  onBack={() => go(tab)}
+                  onSend={sendMessage}
+                />
+              ) : (
+                <EmptyState
+                  emoji="💬"
+                  title="참여 중인 채팅이 없어요"
+                  desc={"공구에 참여하면 채팅방이 열려요.\n홈에서 마음에 드는 공구를 찾아보세요!"}
+                />
+              ))}
 
             {screen === "create" && (
               <CreateScreen
@@ -1254,6 +1264,16 @@ function VerifyScreen({
 /* Home                                                                */
 /* ------------------------------------------------------------------ */
 
+function EmptyState({ emoji, title, desc }: { emoji: string; title: string; desc?: string }) {
+  return (
+    <View style={styles.emptyWrap}>
+      <Text style={styles.emptyEmoji}>{emoji}</Text>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      {!!desc && <Text style={styles.emptyDesc}>{desc}</Text>}
+    </View>
+  );
+}
+
 function HomeScreen({
   deals,
   filter,
@@ -1319,11 +1339,23 @@ function HomeScreen({
         })}
       </ScrollView>
 
-      <ScrollView contentContainerStyle={styles.dealList}>
-        {visible.map((d) => (
-          <DealCard key={d.id} deal={d} onPress={() => onOpen(d.id)} />
-        ))}
-      </ScrollView>
+      {visible.length === 0 ? (
+        <EmptyState
+          emoji="🧺"
+          title={filter === "전체" ? "진행 중인 공구가 없어요" : `'${filter}' 공구가 없어요`}
+          desc={
+            filter === "전체"
+              ? "우리 동네에 아직 열린 공구가 없어요.\n첫 공구를 만들어보세요!"
+              : "다른 카테고리를 둘러보거나 새 공구를 열어보세요."
+          }
+        />
+      ) : (
+        <ScrollView contentContainerStyle={styles.dealList}>
+          {visible.map((d) => (
+            <DealCard key={d.id} deal={d} onPress={() => onOpen(d.id)} />
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -2338,8 +2370,15 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: t.bg },
   flex: { flex: 1 },
   root: { flex: 1, backgroundColor: t.bg },
+  rootWeb: { width: "100%", maxWidth: 480, alignSelf: "center" },
   body: { flex: 1, minHeight: 0 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+
+  /* empty state */
+  emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, paddingVertical: 60, gap: 10 },
+  emptyEmoji: { fontSize: 44, marginBottom: 4 },
+  emptyTitle: { fontSize: 16, fontWeight: "700", color: t.ink, textAlign: "center" },
+  emptyDesc: { fontSize: 14, color: t.muted, lineHeight: 20, textAlign: "center" },
 
   /* login */
   loginWrap: { flex: 1, paddingHorizontal: 28, paddingTop: "8%", paddingBottom: "4%", backgroundColor: "#FEF4F7" },
@@ -2460,9 +2499,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2
   },
-  chipScroll: { flexShrink: 0 },
-  chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
+  chipScroll: { flexShrink: 0, flexGrow: 0 },
+  chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10, alignItems: "center" },
   filterChip: {
+    flexShrink: 0,
+    flexGrow: 0,
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
