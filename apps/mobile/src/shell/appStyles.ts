@@ -607,5 +607,32 @@ export const styles = StyleSheet.create({
   roomLeaveText: { fontSize: 12, fontWeight: "700", color: t.muted },
 
   /* 확인 시트 취소 버튼 */
-  confirmCancel: { flex: 1, backgroundColor: t.bg }
+  confirmCancel: { flex: 1, backgroundColor: t.bg },
+
+  /* 알림 목록 화면 (main 병합) */
+  notifItemCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  notifIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: t.roseSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1
+  },
+  notifTypeBadge: {
+    backgroundColor: t.roseSoft,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  }
 });

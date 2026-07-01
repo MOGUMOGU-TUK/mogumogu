@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useFirebaseAuth, type UseFirebaseAuth } from "../features/auth/useFirebaseAuth";
 import { useChatMessages } from "../features/chat/useChatMessages";
 import { useFirestoreData } from "../features/data/useFirestoreData";
+import { verifyNeighborhood, mapLocationError } from "../services/location/verifyNeighborhood";
 import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
@@ -58,7 +59,8 @@ type Screen =
   | "chat"
   | "create"
   | "review"
-  | "mypage";
+  | "mypage"
+  | "notifications";
 
 type MainTab = "home" | "map" | "chat" | "mypage";
 
@@ -191,6 +193,16 @@ const NOTIF_ITEMS: Array<{ key: NotifKey; label: string }> = [
 type ReviewKey = "time" | "fair" | "manner" | "desc";
 type NotifKey = keyof NotifSettings;
 
+type NotifItem = {
+  id: string;
+  title: string;
+  body: string;
+  gongguId?: string;
+  type?: string;
+  receivedAt: string;
+  read: boolean;
+};
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -252,6 +264,7 @@ export function GongguMateApp() {
   const [screen, setScreen] = useState<Screen>("login");
   const [tab, setTab] = useState<MainTab>("home");
   const [selectedId, setSelectedId] = useState("");
+  const [detailFrom, setDetailFrom] = useState<Screen>("home");
   const [mapSel, setMapSel] = useState("");
   const [joined, setJoined] = useState<string[]>([]);
   const [hearts, setHearts] = useState<string[]>([]);
@@ -262,6 +275,12 @@ export function GongguMateApp() {
   const [nickname, setNickname] = useState("");
   const [verifyStep, setVerifyStep] = useState(0);
   const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const [verifiedNeighborhood, setVerifiedNeighborhood] = useState("");
+  const [verifiedCoords, setVerifiedCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
@@ -282,6 +301,7 @@ export function GongguMateApp() {
     deadline: true,
     chat: false
   });
+  const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
@@ -316,17 +336,53 @@ export function GongguMateApp() {
     void loadNotifSettings(uid).then(setNotif);
   }, [auth.user?.uid, auth.user?.isAnonymous]);
 
+  /* 포그라운드 알림 수신 → 알림 목록에 저장 */
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const { title, body, data } = notification.request.content;
+      const payload = data as { gongguId?: string; type?: string };
+      setNotifItems((prev) => [
+        {
+          id: notification.request.identifier,
+          title: title ?? "모구모구",
+          body: body ?? "",
+          gongguId: payload?.gongguId,
+          type: payload?.type,
+          receivedAt: new Date().toISOString(),
+          read: false
+        },
+        ...prev
+      ]);
+    });
+    return () => sub.remove();
+  }, []);
+
   /* 알림 탭 시 해당 화면으로 이동 */
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as {
-        gongguId?: string;
-        type?: string;
-      };
-      if (data?.gongguId) {
-        setSelectedId(data.gongguId);
+      const { title, body, data } = response.notification.request.content;
+      const payload = data as { gongguId?: string; type?: string };
+      /* 알림 목록에 추가 (중복 방지) */
+      const id = response.notification.request.identifier;
+      setNotifItems((prev) => {
+        if (prev.some((n) => n.id === id)) return prev;
+        return [
+          {
+            id,
+            title: title ?? "모구모구",
+            body: body ?? "",
+            gongguId: payload?.gongguId,
+            type: payload?.type,
+            receivedAt: new Date().toISOString(),
+            read: true
+          },
+          ...prev
+        ];
+      });
+      if (payload?.gongguId) {
+        setSelectedId(payload.gongguId);
         setShowJoin(false);
-        if (data.type === "chat") {
+        if (payload.type === "chat") {
           setTab("chat");
           setScreen("chat");
         } else {
@@ -343,13 +399,13 @@ export function GongguMateApp() {
     () => ({
       id: auth.user?.uid ?? "user_me",
       nickname: nickname.trim() || auth.user?.displayName || "봉천동이웃",
-      neighborhood: "봉천동",
+      neighborhood: verifiedNeighborhood || "봉천동",
       universityVerified: false,
-      locationVerified: true,
+      locationVerified: Boolean(verifiedNeighborhood),
       trustScore: 36.5,
       completedGongguCount: 0
     }),
-    [auth.user, nickname]
+    [auth.user, nickname, verifiedNeighborhood]
   );
 
   /* 채팅 실시간 구독 */
@@ -407,9 +463,11 @@ export function GongguMateApp() {
       if (confirm) { setConfirm(null); return true; }
       if (showJoin) { setShowJoin(false); return true; }
       if (screen === "verify") { setScreen("login"); return true; }
-      if (screen === "detail" || screen === "create" || screen === "review") { go(tab); return true; }
-      if (screen === "chat") { go("chatList", "chat"); return true; }
-      if (screen === "chatList" || screen === "map" || screen === "mypage") { go("home", "home"); return true; }
+      if (screen === "detail") { go(detailFrom === "notifications" ? "notifications" : tab); return true; }
+      if (screen === "create" || screen === "review") { go(tab); return true; }
+      if (screen === "chat") { go(tab); return true; }
+      if (screen === "notifications") { go("home", "home"); return true; }
+      if (screen === "map" || screen === "mypage") { go("home", "home"); return true; }
       return false; // login / home → 시스템이 처리 (앱 종료)
     });
     return () => sub.remove();
@@ -422,6 +480,7 @@ export function GongguMateApp() {
   }
 
   function openDeal(id: string) {
+    setDetailFrom(screen);
     setSelectedId(id);
     setScreen("detail");
   }
@@ -585,16 +644,31 @@ export function GongguMateApp() {
                 step={verifyStep}
                 nickname={nickname}
                 locating={locating}
+                locateError={locateError}
+                neighborhood={verifiedNeighborhood}
                 onNick={setNickname}
                 onNext={() => {
-                  if (nickname.trim()) setVerifyStep(1);
+                  if (nickname.trim()) {
+                    setLocateError(null);
+                    setVerifyStep(1);
+                  }
                 }}
                 onLocate={() => {
                   setLocating(true);
-                  setTimeout(() => {
-                    setLocating(false);
-                    setVerifyStep(2);
-                  }, 1400);
+                  setLocateError(null);
+                  void verifyNeighborhood()
+                    .then((location) => {
+                      setVerifiedNeighborhood(location.neighborhood);
+                      setVerifiedCoords({
+                        latitude: location.latitude,
+                        longitude: location.longitude
+                      });
+                      setVerifyStep(2);
+                    })
+                    .catch((error: unknown) => {
+                      setLocateError(mapLocationError(error));
+                    })
+                    .finally(() => setLocating(false));
                 }}
                 onStart={() => go("home", "home")}
               />
@@ -606,12 +680,15 @@ export function GongguMateApp() {
                 filter={homeFilter}
                 onFilter={setHomeFilter}
                 onOpen={openDeal}
+                hasUnread={notifItems.some((n) => !n.read)}
+                onBell={() => setScreen("notifications")}
               />
             )}
 
             {screen === "map" && (
               <MapScreen
-                deals={feedDeals}
+                deals={deals}
+                neighborhood={verifiedNeighborhood || "봉천동"}
                 mapSel={mapSel}
                 pick={mapPick}
                 onPickMarker={setMapSel}
@@ -625,8 +702,7 @@ export function GongguMateApp() {
                 deal={sel}
                 hearted={hearts.includes(sel.id)}
                 joined={joined.includes(sel.id)}
-                isHost={sel.hostId === currentUser.id}
-                onBack={() => go(tab)}
+                onBack={() => go(detailFrom === "notifications" ? "notifications" : tab)}
                 onHeart={() =>
                   setHearts((prev) =>
                     prev.includes(sel.id) ? prev.filter((x) => x !== sel.id) : [...prev, sel.id]
@@ -707,6 +783,23 @@ export function GongguMateApp() {
                   setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
                   setScreen("review");
                 }}
+              />
+            )}
+
+            {screen === "notifications" && (
+              <NotifScreen
+                items={notifItems}
+                deals={deals}
+                onBack={() => go("home", "home")}
+                onOpen={(gongguId, notifId) => {
+                  setNotifItems((prev) =>
+                    prev.map((n) => (n.id === notifId ? { ...n, read: true } : n))
+                  );
+                  setDetailFrom("notifications");
+                  setSelectedId(gongguId);
+                  setScreen("detail");
+                }}
+                onClear={() => setNotifItems([])}
               />
             )}
           </View>
@@ -1166,6 +1259,8 @@ function VerifyScreen({
   step,
   nickname,
   locating,
+  locateError,
+  neighborhood,
   onNick,
   onNext,
   onLocate,
@@ -1174,6 +1269,8 @@ function VerifyScreen({
   step: number;
   nickname: string;
   locating: boolean;
+  locateError: string | null;
+  neighborhood: string;
   onNick: (v: string) => void;
   onNext: () => void;
   onLocate: () => void;
@@ -1243,6 +1340,11 @@ function VerifyScreen({
                 ? "현재 위치를 기반으로 동네를 확인하고 있어요"
                 : "GPS로 현재 위치를 확인해 우리 동네 이웃임을 인증해요. 정확한 위치는 공개되지 않아요."}
             </Text>
+            {!!locateError && (
+              <Text style={{ fontSize: 12, color: t.rose, textAlign: "center", marginTop: 10 }}>
+                {locateError}
+              </Text>
+            )}
           </View>
           <Pressable
             disabled={locating}
@@ -1261,10 +1363,10 @@ function VerifyScreen({
               <Text style={{ fontSize: 40, color: "#fff" }}>✓</Text>
             </View>
             <Text style={[styles.verifyTitle, { textAlign: "center", marginTop: 20 }]}>
-              봉천동 인증 완료!
+              {neighborhood} 인증 완료!
             </Text>
             <Text style={[styles.verifyDesc, { textAlign: "center" }]}>
-              이제 봉천동 반경 1km 안의{"\n"}공구를 보고 참여할 수 있어요
+              이제 {neighborhood} 반경 1km 안의{"\n"}공구를 보고 참여할 수 있어요
             </Text>
             <Pressable style={styles.eduBadge}>
               <Text style={{ fontSize: 13, color: t.chipInk }}>
@@ -1302,12 +1404,16 @@ function HomeScreen({
   deals,
   filter,
   onFilter,
-  onOpen
+  onOpen,
+  hasUnread,
+  onBell
 }: {
   deals: Deal[];
   filter: string;
   onFilter: (f: string) => void;
   onOpen: (id: string) => void;
+  hasUnread: boolean;
+  onBell: () => void;
 }) {
   const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
 
@@ -1323,10 +1429,10 @@ function HomeScreen({
             <SearchIcon size={20} color={t.ink} />
           </Pressable>
           <View>
-            <Pressable>
+            <Pressable onPress={onBell}>
               <BellIcon size={20} color={t.ink} />
             </Pressable>
-            <View style={styles.bellDot} />
+            {hasUnread && <View style={styles.bellDot} />}
           </View>
         </View>
       </View>
@@ -1440,6 +1546,7 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function MapScreen({
   deals,
+  neighborhood,
   mapSel,
   pick,
   onPickMarker,
@@ -1447,6 +1554,7 @@ function MapScreen({
   onOpen
 }: {
   deals: Deal[];
+  neighborhood: string;
   mapSel: string;
   pick: Deal | null;
   onPickMarker: (id: string) => void;
@@ -1492,7 +1600,7 @@ function MapScreen({
       {/* top bar */}
       <View style={styles.mapTopBar}>
         <View style={styles.mapPill}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>봉천동 · 반경 1km</Text>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>{neighborhood} · 반경 1km</Text>
         </View>
         <Pressable style={styles.mapPill} onPress={onList}>
           <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>☰ 리스트</Text>
@@ -2238,6 +2346,111 @@ function Toggle({ on, onPress }: { on: boolean; onPress: () => void }) {
     >
       <View style={[styles.toggleKnob, { left: on ? 22 : 3 }]} />
     </Pressable>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Notifications screen                                                */
+/* ------------------------------------------------------------------ */
+
+const TYPE_LABEL: Record<string, string> = {
+  join: "새 참여자",
+  full: "모집 완료",
+  deadline: "마감 임박",
+  chat: "채팅 메시지"
+};
+
+
+function relativeTime(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "방금";
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  return `${Math.floor(diff / 86400)}일 전`;
+}
+
+function NotifScreen({
+  items,
+  deals,
+  onBack,
+  onOpen,
+  onClear
+}: {
+  items: NotifItem[];
+  deals: Deal[];
+  onBack: () => void;
+  onOpen: (gongguId: string, notifId: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <View style={styles.flex}>
+      <View style={styles.homeHeader}>
+        <Pressable onPress={onBack} style={{ padding: 4, marginLeft: -4 }}>
+          <Text style={{ fontSize: 20, color: t.ink, fontWeight: "300" }}>‹</Text>
+        </Pressable>
+        <Text style={{ fontSize: 17, fontWeight: "800", color: t.ink, flex: 1, textAlign: "center" }}>
+          알림
+        </Text>
+        {items.length > 0 ? (
+          <Pressable onPress={onClear}>
+            <Text style={{ fontSize: 13, color: t.muted }}>모두 지우기</Text>
+          </Pressable>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
+      </View>
+
+      {items.length === 0 ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <BellIcon size={40} color={t.dim} />
+          <Text style={{ fontSize: 15, fontWeight: "700", color: t.dim }}>알림이 없어요</Text>
+          <Text style={{ fontSize: 13, color: t.muted }}>공구 참여·채팅 알림이 여기에 표시돼요</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 8 }}>
+          {items.map((item) => {
+            const deal = item.gongguId ? deals.find((d) => d.id === item.gongguId) : null;
+            const typeLabel = item.type ? (TYPE_LABEL[item.type] ?? "") : "";
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => item.gongguId && onOpen(item.gongguId, item.id)}
+                style={[styles.notifItemCard, !item.read && { borderWidth: 2, borderColor: t.pink }]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                  <View style={styles.notifIconWrap}>
+                    <BellIcon size={16} color={t.rose} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      {!!typeLabel && (
+                        <View style={styles.notifTypeBadge}>
+                          <Text style={{ fontSize: 10, fontWeight: "700", color: t.rose }}>{typeLabel}</Text>
+                        </View>
+                      )}
+                      <Text style={{ fontSize: 11, color: t.muted }}>{relativeTime(item.receivedAt)}</Text>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: t.ink, marginBottom: 2 }}>
+                      {item.title}
+                    </Text>
+                    {!!item.body && (
+                      <Text style={{ fontSize: 13, color: t.inkSoft, lineHeight: 18 }} numberOfLines={2}>
+                        {item.body}
+                      </Text>
+                    )}
+                    {deal && (
+                      <Text style={{ fontSize: 12, color: t.muted, marginTop: 4 }}>
+                        {deal.title} · {deal.spot}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
   );
 }
 
