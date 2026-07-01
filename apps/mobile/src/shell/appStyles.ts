@@ -634,5 +634,22 @@ export const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2
-  }
+  },
+
+  /* 홈 제목 검색바 */
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 6,
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: t.bg,
+    borderWidth: 1,
+    borderColor: t.border
+  },
+  searchInput: { flex: 1, fontSize: 14, color: t.ink, padding: 0 },
+  searchClear: { fontSize: 15, fontWeight: "700", color: t.dim, paddingHorizontal: 2 }
 });

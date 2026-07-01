@@ -114,8 +114,8 @@ type Deal = {
   desc: string;
 };
 
-const HOME_FILTERS = ["전체", "베이커리", "식품", "간식", "생필품", "기타"];
-const CREATE_CATS = ["베이커리", "식품", "간식", "생필품", "뷰티", "기타"];
+const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
+const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
 
 type ChatMsg = {
   type: "system" | "other" | "me";
@@ -134,11 +134,12 @@ type ConfirmState = {
 
 /* Gonggu → Deal 어댑터 */
 const CATEGORY_TINTS: Record<string, string> = {
-  베이커리: "#F3DEC4",
   식품: "#CFE2EC",
-  간식: "#F0D2CE",
-  생필품: "#D8E0CC",
-  뷰티: "#E8D5E5",
+  생활: "#D8E0CC",
+  패션: "#E8D5E5",
+  반려동물: "#F3DEC4",
+  "가구·인테리어": "#E4D9CE",
+  스포츠: "#CDE7E0",
   기타: "#EEE0E5",
 };
 
@@ -311,7 +312,8 @@ export function GongguMateApp() {
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
-  const [createCat, setCreateCat] = useState("베이커리");
+  const [createCat, setCreateCat] = useState("식품");
+  const [cTitle, setCTitle] = useState("");
   const [cTotal, setCTotal] = useState("");
   const [cQty, setCQty] = useState("10");
   const [cPickup, setCPickup] = useState("");
@@ -646,7 +648,7 @@ export function GongguMateApp() {
       try {
         await createGongguDoc(
           {
-            title: `${createCat} 공구`,
+            title: cTitle.trim() || `${createCat} 공구`,
             category: createCat,
             totalPrice: Number(cTotal) || 0,
             totalQuantity: Number(cQty) || 1,
@@ -829,6 +831,8 @@ export function GongguMateApp() {
               <CreateScreen
                 cat={createCat}
                 onCat={setCreateCat}
+                title={cTitle}
+                onTitle={setCTitle}
                 total={cTotal}
                 qty={cQty}
                 pickup={cPickup}
@@ -1857,8 +1861,20 @@ function HomeScreen({
   hasUnread: boolean;
   onBell: () => void;
 }) {
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const searching = searchOpen && q.length > 0;
+  const visible = deals.filter(
+    (d) =>
+      (filter === "전체" || d.cat === filter) &&
+      (q === "" || d.title.toLowerCase().includes(q))
+  );
+
   const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
   const headerLocation = isLocationVerified ? `📍 ${locationLabel}` : locationLabel;
+
 
   return (
     <View style={styles.flex}>
@@ -1868,8 +1884,15 @@ function HomeScreen({
           <Text style={styles.chevron}>⌄</Text>
         </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
-          <Pressable>
-            <SearchIcon size={20} color={t.ink} />
+          <Pressable
+            onPress={() =>
+              setSearchOpen((open) => {
+                if (open) setQuery("");
+                return !open;
+              })
+            }
+          >
+            <SearchIcon size={20} color={searchOpen ? t.rose : t.ink} />
           </Pressable>
           <View>
             <Pressable onPress={onBell}>
@@ -1879,6 +1902,26 @@ function HomeScreen({
           </View>
         </View>
       </View>
+
+      {searchOpen && (
+        <View style={styles.searchBar}>
+          <SearchIcon size={16} color={t.dim} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            placeholder="제목 검색"
+            placeholderTextColor={t.dim}
+            style={styles.searchInput}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery("")} hitSlop={8}>
+              <Text style={styles.searchClear}>✕</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <ScrollView
         horizontal
@@ -1915,19 +1958,27 @@ function HomeScreen({
       </ScrollView>
 
       {visible.length === 0 ? (
-        <EmptyState
-          emoji="🧺"
-          title={
-            filter === "전체"
-              ? "진행 중인 공구가 없어요"
-              : `'${filter}' 공구가 없어요`
-          }
-          desc={
-            filter === "전체"
-              ? "우리 동네에 아직 열린 공구가 없어요.\n첫 공구를 만들어보세요!"
-              : "다른 카테고리를 둘러보거나 새 공구를 열어보세요."
-          }
-        />
+        searching ? (
+          <EmptyState
+            emoji="🔍"
+            title={`'${query.trim()}' 검색 결과가 없어요`}
+            desc={"다른 키워드로 검색해보세요."}
+          />
+        ) : (
+          <EmptyState
+            emoji="🧺"
+            title={
+              filter === "전체"
+                ? "진행 중인 공구가 없어요"
+                : `'${filter}' 공구가 없어요`
+            }
+            desc={
+              filter === "전체"
+                ? "우리 동네에 아직 열린 공구가 없어요.\n첫 공구를 만들어보세요!"
+                : "다른 카테고리를 둘러보거나 새 공구를 열어보세요."
+            }
+          />
+        )
       ) : (
         <ScrollView contentContainerStyle={styles.dealList}>
           {visible.map((d) => (
@@ -2568,6 +2619,8 @@ function ChatScreen({
 function CreateScreen({
   cat,
   onCat,
+  title,
+  onTitle,
   total,
   qty,
   pickup,
@@ -2581,6 +2634,8 @@ function CreateScreen({
 }: {
   cat: string;
   onCat: (c: string) => void;
+  title: string;
+  onTitle: (v: string) => void;
   total: string;
   qty: string;
   pickup: string;
@@ -2618,9 +2673,11 @@ function CreateScreen({
         </View>
 
         <View>
-          <Text style={styles.fieldLabel}>상품명</Text>
+          <Text style={styles.fieldLabel}>제목</Text>
           <TextInput
-            placeholder="예) 코스트코 크루아상 24개입"
+            value={title}
+            onChangeText={onTitle}
+            placeholder="예) 코스트코 크루아상 나눠사요"
             placeholderTextColor={t.dim}
             style={styles.createInput}
           />
