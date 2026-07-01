@@ -28,6 +28,8 @@ import { useFirestoreData } from "../features/data/useFirestoreData";
 import {
   verifyNeighborhood,
   mapLocationError,
+  formatVerifiedLocationBrief,
+  type VerifiedLocation
 } from "../services/location/verifyNeighborhood";
 import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
@@ -304,11 +306,8 @@ export function GongguMateApp() {
   const [verifyStep, setVerifyStep] = useState(0);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
-  const [verifiedNeighborhood, setVerifiedNeighborhood] = useState("");
-  const [verifiedCoords, setVerifiedCoords] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const [verifiedLocation, setVerifiedLocation] = useState<VerifiedLocation | null>(null);
+  const verifiedLocationLabel = formatVerifiedLocationBrief(verifiedLocation);
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
@@ -430,14 +429,14 @@ export function GongguMateApp() {
   const currentUser = useMemo<User>(
     () => ({
       id: auth.user?.uid ?? "user_me",
-      nickname: nickname.trim() || auth.user?.displayName || "봉천동이웃",
-      neighborhood: verifiedNeighborhood || "봉천동",
+      nickname: nickname.trim() || auth.user?.displayName || "이웃",
+      neighborhood: verifiedLocation?.neighborhood ?? "",
       universityVerified: false,
-      locationVerified: Boolean(verifiedNeighborhood),
+      locationVerified: Boolean(verifiedLocation),
       trustScore: 36.5,
       completedGongguCount: 0,
     }),
-    [auth.user, nickname, verifiedNeighborhood],
+    [auth.user, nickname, verifiedLocation]
   );
 
   /* 채팅 실시간 구독 */
@@ -724,7 +723,7 @@ export function GongguMateApp() {
                 nickname={nickname}
                 locating={locating}
                 locateError={locateError}
-                neighborhood={verifiedNeighborhood}
+                neighborhood={verifiedLocationLabel}
                 onNick={setNickname}
                 onNext={() => {
                   if (nickname.trim()) {
@@ -737,11 +736,7 @@ export function GongguMateApp() {
                   setLocateError(null);
                   void verifyNeighborhood()
                     .then((location) => {
-                      setVerifiedNeighborhood(location.neighborhood);
-                      setVerifiedCoords({
-                        latitude: location.latitude,
-                        longitude: location.longitude,
-                      });
+                      setVerifiedLocation(location);
                       setVerifyStep(2);
                     })
                     .catch((error: unknown) => {
@@ -755,7 +750,9 @@ export function GongguMateApp() {
 
             {screen === "home" && (
               <HomeScreen
-                deals={feedDeals}
+                deals={deals}
+                locationLabel={verifiedLocationLabel}
+                isLocationVerified={Boolean(verifiedLocation)}
                 filter={homeFilter}
                 onFilter={setHomeFilter}
                 onOpen={openDeal}
@@ -767,7 +764,7 @@ export function GongguMateApp() {
             {screen === "map" && (
               <MapScreen
                 deals={deals}
-                neighborhood={verifiedNeighborhood || "봉천동"}
+                locationLabel={verifiedLocationLabel}
                 mapSel={mapSel}
                 pick={mapPick}
                 onPickMarker={setMapSel}
@@ -859,6 +856,7 @@ export function GongguMateApp() {
             {screen === "mypage" && (
               <MyPageScreen
                 nickname={currentUser.nickname}
+                locationLabel={verifiedLocationLabel}
                 notif={notif}
                 onToggle={(key) => {
                   setNotif((prev) => {
@@ -1689,7 +1687,7 @@ function VerifyScreen({
               <TextInput
                 value={nickname}
                 onChangeText={(v) => onNick(v.slice(0, 12))}
-                placeholder="예) 봉천동크루아상러버"
+                placeholder="예) 크루아상러버"
                 placeholderTextColor={t.dim}
                 style={styles.nickInput}
               />
@@ -1841,6 +1839,8 @@ function EmptyState({
 
 function HomeScreen({
   deals,
+  locationLabel,
+  isLocationVerified,
   filter,
   onFilter,
   onOpen,
@@ -1848,6 +1848,8 @@ function HomeScreen({
   onBell,
 }: {
   deals: Deal[];
+  locationLabel: string;
+  isLocationVerified: boolean;
   filter: string;
   onFilter: (f: string) => void;
   onOpen: (id: string) => void;
@@ -1855,12 +1857,13 @@ function HomeScreen({
   onBell: () => void;
 }) {
   const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
+  const headerLocation = isLocationVerified ? `📍 ${locationLabel}` : locationLabel;
 
   return (
     <View style={styles.flex}>
       <View style={styles.homeHeader}>
         <Pressable style={styles.locButton}>
-          <Text style={styles.locText}>봉천동</Text>
+          <Text style={styles.locText}>{headerLocation}</Text>
           <Text style={styles.chevron}>⌄</Text>
         </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
@@ -2000,7 +2003,7 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function MapScreen({
   deals,
-  neighborhood,
+  locationLabel,
   mapSel,
   pick,
   onPickMarker,
@@ -2008,7 +2011,7 @@ function MapScreen({
   onOpen,
 }: {
   deals: Deal[];
-  neighborhood: string;
+  locationLabel: string;
   mapSel: string;
   pick: Deal | null;
   onPickMarker: (id: string) => void;
@@ -2070,9 +2073,7 @@ function MapScreen({
       {/* top bar */}
       <View style={styles.mapTopBar}>
         <View style={styles.mapPill}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>
-            {neighborhood} · 반경 1km
-          </Text>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>{locationLabel} · 반경 1km</Text>
         </View>
         <Pressable style={styles.mapPill} onPress={onList}>
           <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>
@@ -2879,11 +2880,13 @@ function ReviewScreen({
 
 function MyPageScreen({
   nickname,
+  locationLabel,
   notif,
   onToggle,
   onReviewDemo,
 }: {
   nickname: string;
+  locationLabel: string;
   notif: Record<NotifKey, boolean>;
   onToggle: (key: NotifKey) => void;
   onReviewDemo: () => void;
@@ -2919,9 +2922,7 @@ function MyPageScreen({
                 </Text>
               </View>
             </View>
-            <Text style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>
-              봉천동 · 서울대학교
-            </Text>
+            <Text style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>{locationLabel}</Text>
           </View>
           <Pressable style={styles.editButton}>
             <Text style={{ fontSize: 12, fontWeight: "600", color: t.chipInk }}>
