@@ -84,7 +84,8 @@ type Screen =
   | "chat"
   | "create"
   | "review"
-  | "mypage";
+  | "mypage"
+  | "notifications";
 
 type MainTab = "home" | "map" | "chat" | "mypage";
 
@@ -195,6 +196,16 @@ const NOTIF_ITEMS: Array<{ key: NotifKey; label: string }> = [
 type ReviewKey = "time" | "fair" | "manner" | "desc";
 type NotifKey = keyof NotifSettings;
 
+type NotifItem = {
+  id: string;
+  title: string;
+  body: string;
+  gongguId?: string;
+  type?: string;
+  receivedAt: string;
+  read: boolean;
+};
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -253,6 +264,7 @@ export function GongguMateApp() {
   const [screen, setScreen] = useState<Screen>("login");
   const [tab, setTab] = useState<MainTab>("home");
   const [selectedId, setSelectedId] = useState("");
+  const [detailFrom, setDetailFrom] = useState<Screen>("home");
   const [mapSel, setMapSel] = useState("");
   const [joined, setJoined] = useState<string[]>([]);
   const [hearts, setHearts] = useState<string[]>([]);
@@ -282,6 +294,7 @@ export function GongguMateApp() {
     deadline: true,
     chat: false
   });
+  const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
@@ -316,17 +329,53 @@ export function GongguMateApp() {
     void loadNotifSettings(uid).then(setNotif);
   }, [auth.user?.uid, auth.user?.isAnonymous]);
 
+  /* 포그라운드 알림 수신 → 알림 목록에 저장 */
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const { title, body, data } = notification.request.content;
+      const payload = data as { gongguId?: string; type?: string };
+      setNotifItems((prev) => [
+        {
+          id: notification.request.identifier,
+          title: title ?? "모구모구",
+          body: body ?? "",
+          gongguId: payload?.gongguId,
+          type: payload?.type,
+          receivedAt: new Date().toISOString(),
+          read: false
+        },
+        ...prev
+      ]);
+    });
+    return () => sub.remove();
+  }, []);
+
   /* 알림 탭 시 해당 화면으로 이동 */
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as {
-        gongguId?: string;
-        type?: string;
-      };
-      if (data?.gongguId) {
-        setSelectedId(data.gongguId);
+      const { title, body, data } = response.notification.request.content;
+      const payload = data as { gongguId?: string; type?: string };
+      /* 알림 목록에 추가 (중복 방지) */
+      const id = response.notification.request.identifier;
+      setNotifItems((prev) => {
+        if (prev.some((n) => n.id === id)) return prev;
+        return [
+          {
+            id,
+            title: title ?? "모구모구",
+            body: body ?? "",
+            gongguId: payload?.gongguId,
+            type: payload?.type,
+            receivedAt: new Date().toISOString(),
+            read: true
+          },
+          ...prev
+        ];
+      });
+      if (payload?.gongguId) {
+        setSelectedId(payload.gongguId);
         setShowJoin(false);
-        if (data.type === "chat") {
+        if (payload.type === "chat") {
           setTab("chat");
           setScreen("chat");
         } else {
@@ -390,8 +439,10 @@ export function GongguMateApp() {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (showJoin) { setShowJoin(false); return true; }
       if (screen === "verify") { setScreen("login"); return true; }
-      if (screen === "detail" || screen === "create" || screen === "review") { go(tab); return true; }
+      if (screen === "detail") { go(detailFrom === "notifications" ? "notifications" : tab); return true; }
+      if (screen === "create" || screen === "review") { go(tab); return true; }
       if (screen === "chat") { go(tab); return true; }
+      if (screen === "notifications") { go("home", "home"); return true; }
       if (screen === "map" || screen === "mypage") { go("home", "home"); return true; }
       return false; // login / home → 시스템이 처리 (앱 종료)
     });
@@ -405,6 +456,7 @@ export function GongguMateApp() {
   }
 
   function openDeal(id: string) {
+    setDetailFrom(screen);
     setSelectedId(id);
     setScreen("detail");
   }
@@ -526,6 +578,8 @@ export function GongguMateApp() {
                 filter={homeFilter}
                 onFilter={setHomeFilter}
                 onOpen={openDeal}
+                hasUnread={notifItems.some((n) => !n.read)}
+                onBell={() => setScreen("notifications")}
               />
             )}
 
@@ -545,7 +599,7 @@ export function GongguMateApp() {
                 deal={sel}
                 hearted={hearts.includes(sel.id)}
                 joined={joined.includes(sel.id)}
-                onBack={() => go(tab)}
+                onBack={() => go(detailFrom === "notifications" ? "notifications" : tab)}
                 onHeart={() =>
                   setHearts((prev) =>
                     prev.includes(sel.id) ? prev.filter((x) => x !== sel.id) : [...prev, sel.id]
@@ -613,6 +667,23 @@ export function GongguMateApp() {
                   setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
                   setScreen("review");
                 }}
+              />
+            )}
+
+            {screen === "notifications" && (
+              <NotifScreen
+                items={notifItems}
+                deals={deals}
+                onBack={() => go("home", "home")}
+                onOpen={(gongguId, notifId) => {
+                  setNotifItems((prev) =>
+                    prev.map((n) => (n.id === notifId ? { ...n, read: true } : n))
+                  );
+                  setDetailFrom("notifications");
+                  setSelectedId(gongguId);
+                  setScreen("detail");
+                }}
+                onClear={() => setNotifItems([])}
               />
             )}
           </View>
@@ -1187,12 +1258,16 @@ function HomeScreen({
   deals,
   filter,
   onFilter,
-  onOpen
+  onOpen,
+  hasUnread,
+  onBell
 }: {
   deals: Deal[];
   filter: string;
   onFilter: (f: string) => void;
   onOpen: (id: string) => void;
+  hasUnread: boolean;
+  onBell: () => void;
 }) {
   const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
 
@@ -1208,10 +1283,10 @@ function HomeScreen({
             <SearchIcon size={20} color={t.ink} />
           </Pressable>
           <View>
-            <Pressable>
+            <Pressable onPress={onBell}>
               <BellIcon size={20} color={t.ink} />
             </Pressable>
-            <View style={styles.bellDot} />
+            {hasUnread && <View style={styles.bellDot} />}
           </View>
         </View>
       </View>
@@ -2047,6 +2122,111 @@ function Toggle({ on, onPress }: { on: boolean; onPress: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Notifications screen                                                */
+/* ------------------------------------------------------------------ */
+
+const TYPE_LABEL: Record<string, string> = {
+  join: "새 참여자",
+  full: "모집 완료",
+  deadline: "마감 임박",
+  chat: "채팅 메시지"
+};
+
+
+function relativeTime(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "방금";
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  return `${Math.floor(diff / 86400)}일 전`;
+}
+
+function NotifScreen({
+  items,
+  deals,
+  onBack,
+  onOpen,
+  onClear
+}: {
+  items: NotifItem[];
+  deals: Deal[];
+  onBack: () => void;
+  onOpen: (gongguId: string, notifId: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <View style={styles.flex}>
+      <View style={styles.homeHeader}>
+        <Pressable onPress={onBack} style={{ padding: 4, marginLeft: -4 }}>
+          <Text style={{ fontSize: 20, color: t.ink, fontWeight: "300" }}>‹</Text>
+        </Pressable>
+        <Text style={{ fontSize: 17, fontWeight: "800", color: t.ink, flex: 1, textAlign: "center" }}>
+          알림
+        </Text>
+        {items.length > 0 ? (
+          <Pressable onPress={onClear}>
+            <Text style={{ fontSize: 13, color: t.muted }}>모두 지우기</Text>
+          </Pressable>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
+      </View>
+
+      {items.length === 0 ? (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <BellIcon size={40} color={t.dim} />
+          <Text style={{ fontSize: 15, fontWeight: "700", color: t.dim }}>알림이 없어요</Text>
+          <Text style={{ fontSize: 13, color: t.muted }}>공구 참여·채팅 알림이 여기에 표시돼요</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 8 }}>
+          {items.map((item) => {
+            const deal = item.gongguId ? deals.find((d) => d.id === item.gongguId) : null;
+            const typeLabel = item.type ? (TYPE_LABEL[item.type] ?? "") : "";
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => item.gongguId && onOpen(item.gongguId, item.id)}
+                style={[styles.notifItemCard, !item.read && { borderWidth: 2, borderColor: t.pink }]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+                  <View style={styles.notifIconWrap}>
+                    <BellIcon size={16} color={t.rose} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      {!!typeLabel && (
+                        <View style={styles.notifTypeBadge}>
+                          <Text style={{ fontSize: 10, fontWeight: "700", color: t.rose }}>{typeLabel}</Text>
+                        </View>
+                      )}
+                      <Text style={{ fontSize: 11, color: t.muted }}>{relativeTime(item.receivedAt)}</Text>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: t.ink, marginBottom: 2 }}>
+                      {item.title}
+                    </Text>
+                    {!!item.body && (
+                      <Text style={{ fontSize: 13, color: t.inkSoft, lineHeight: 18 }} numberOfLines={2}>
+                        {item.body}
+                      </Text>
+                    )}
+                    {deal && (
+                      <Text style={{ fontSize: 12, color: t.muted, marginTop: 4 }}>
+                        {deal.title} · {deal.spot}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Bottom nav                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -2254,6 +2434,31 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: t.rose
+  },
+  notifItemCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  notifIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: t.roseSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1
+  },
+  notifTypeBadge: {
+    backgroundColor: t.roseSoft,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2
   },
   chipScroll: { flexShrink: 0 },
   chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
