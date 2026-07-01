@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useFirebaseAuth, type UseFirebaseAuth } from "../features/auth/useFirebaseAuth";
 import { useChatMessages } from "../features/chat/useChatMessages";
 import { useFirestoreData } from "../features/data/useFirestoreData";
+import { verifyNeighborhood, mapLocationError } from "../services/location/verifyNeighborhood";
 import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
@@ -262,6 +263,12 @@ export function GongguMateApp() {
   const [nickname, setNickname] = useState("");
   const [verifyStep, setVerifyStep] = useState(0);
   const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const [verifiedNeighborhood, setVerifiedNeighborhood] = useState("");
+  const [verifiedCoords, setVerifiedCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
@@ -343,13 +350,13 @@ export function GongguMateApp() {
     () => ({
       id: auth.user?.uid ?? "user_me",
       nickname: nickname.trim() || auth.user?.displayName || "봉천동이웃",
-      neighborhood: "봉천동",
+      neighborhood: verifiedNeighborhood || "봉천동",
       universityVerified: false,
-      locationVerified: true,
+      locationVerified: Boolean(verifiedNeighborhood),
       trustScore: 36.5,
       completedGongguCount: 0
     }),
-    [auth.user, nickname]
+    [auth.user, nickname, verifiedNeighborhood]
   );
 
   /* 채팅 실시간 구독 */
@@ -508,16 +515,31 @@ export function GongguMateApp() {
                 step={verifyStep}
                 nickname={nickname}
                 locating={locating}
+                locateError={locateError}
+                neighborhood={verifiedNeighborhood}
                 onNick={setNickname}
                 onNext={() => {
-                  if (nickname.trim()) setVerifyStep(1);
+                  if (nickname.trim()) {
+                    setLocateError(null);
+                    setVerifyStep(1);
+                  }
                 }}
                 onLocate={() => {
                   setLocating(true);
-                  setTimeout(() => {
-                    setLocating(false);
-                    setVerifyStep(2);
-                  }, 1400);
+                  setLocateError(null);
+                  void verifyNeighborhood()
+                    .then((location) => {
+                      setVerifiedNeighborhood(location.neighborhood);
+                      setVerifiedCoords({
+                        latitude: location.latitude,
+                        longitude: location.longitude
+                      });
+                      setVerifyStep(2);
+                    })
+                    .catch((error: unknown) => {
+                      setLocateError(mapLocationError(error));
+                    })
+                    .finally(() => setLocating(false));
                 }}
                 onStart={() => go("home", "home")}
               />
@@ -535,6 +557,7 @@ export function GongguMateApp() {
             {screen === "map" && (
               <MapScreen
                 deals={deals}
+                neighborhood={verifiedNeighborhood || "봉천동"}
                 mapSel={mapSel}
                 pick={mapPick}
                 onPickMarker={setMapSel}
@@ -1071,6 +1094,8 @@ function VerifyScreen({
   step,
   nickname,
   locating,
+  locateError,
+  neighborhood,
   onNick,
   onNext,
   onLocate,
@@ -1079,6 +1104,8 @@ function VerifyScreen({
   step: number;
   nickname: string;
   locating: boolean;
+  locateError: string | null;
+  neighborhood: string;
   onNick: (v: string) => void;
   onNext: () => void;
   onLocate: () => void;
@@ -1148,6 +1175,11 @@ function VerifyScreen({
                 ? "현재 위치를 기반으로 동네를 확인하고 있어요"
                 : "GPS로 현재 위치를 확인해 우리 동네 이웃임을 인증해요. 정확한 위치는 공개되지 않아요."}
             </Text>
+            {!!locateError && (
+              <Text style={{ fontSize: 12, color: t.rose, textAlign: "center", marginTop: 10 }}>
+                {locateError}
+              </Text>
+            )}
           </View>
           <Pressable
             disabled={locating}
@@ -1166,10 +1198,10 @@ function VerifyScreen({
               <Text style={{ fontSize: 40, color: "#fff" }}>✓</Text>
             </View>
             <Text style={[styles.verifyTitle, { textAlign: "center", marginTop: 20 }]}>
-              봉천동 인증 완료!
+              {neighborhood} 인증 완료!
             </Text>
             <Text style={[styles.verifyDesc, { textAlign: "center" }]}>
-              이제 봉천동 반경 1km 안의{"\n"}공구를 보고 참여할 수 있어요
+              이제 {neighborhood} 반경 1km 안의{"\n"}공구를 보고 참여할 수 있어요
             </Text>
             <Pressable style={styles.eduBadge}>
               <Text style={{ fontSize: 13, color: t.chipInk }}>
@@ -1345,6 +1377,7 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function MapScreen({
   deals,
+  neighborhood,
   mapSel,
   pick,
   onPickMarker,
@@ -1352,6 +1385,7 @@ function MapScreen({
   onOpen
 }: {
   deals: Deal[];
+  neighborhood: string;
   mapSel: string;
   pick: Deal | null;
   onPickMarker: (id: string) => void;
@@ -1397,7 +1431,7 @@ function MapScreen({
       {/* top bar */}
       <View style={styles.mapTopBar}>
         <View style={styles.mapPill}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>봉천동 · 반경 1km</Text>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>{neighborhood} · 반경 1km</Text>
         </View>
         <Pressable style={styles.mapPill} onPress={onList}>
           <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>☰ 리스트</Text>
