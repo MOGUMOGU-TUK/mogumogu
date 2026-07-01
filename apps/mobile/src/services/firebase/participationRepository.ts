@@ -53,8 +53,8 @@ export function subscribeReviews(onChange: (items: Review[]) => void): () => voi
 
 // ─── 쓰기 (규칙 완화로 클라이언트가 직접 수행) ──────────────────────
 
-/** 공구 참여: 참여 문서 생성 + 공구 인원/상태 갱신 + 채팅방 입장 안내 메시지. (제2항 흐름의 단순 계산) */
-export async function joinGongguDoc(gongguId: string, user: User): Promise<void> {
+/** 공구 참여: 참여 문서 생성 + 확보 수량/인원/상태 갱신 + 채팅방 입장 안내 메시지. */
+export async function joinGongguDoc(gongguId: string, user: User, quantity: number): Promise<void> {
   const services = getFirebaseServices();
   if (!services) {
     throw new Error("Firebase가 설정되지 않았습니다.");
@@ -73,11 +73,17 @@ export async function joinGongguDoc(gongguId: string, user: User): Promise<void>
     return; // 이미 참여함
   }
 
-  if (gonggu.currentParticipants >= gonggu.targetParticipants) {
+  const qty = Math.max(1, Math.floor(quantity));
+  const remaining = gonggu.totalQuantity - gonggu.claimedQuantity;
+  if (remaining <= 0) {
     throw new Error("모집이 완료된 공구예요.");
   }
+  if (qty > remaining) {
+    throw new Error("남은 수량을 초과했어요.");
+  }
 
-  const nextCount = Math.min(gonggu.currentParticipants + 1, gonggu.targetParticipants);
+  const unitPrice = Math.ceil(gonggu.totalPrice / Math.max(1, gonggu.totalQuantity));
+  const nextClaimed = gonggu.claimedQuantity + qty;
   const participation: Participation = {
     gongguId,
     userId: user.id,
@@ -85,20 +91,23 @@ export async function joinGongguDoc(gongguId: string, user: User): Promise<void>
     paymentStatus: "confirmed",
     pickupConfirmationStatus: "pending",
     reviewStatus: "required",
+    quantity: qty,
+    amount: unitPrice * qty,
     joinedAt: new Date().toISOString()
   };
 
   const batch = writeBatch(db);
   batch.set(partRef, participation);
   batch.update(gongguRef, {
-    currentParticipants: nextCount,
-    status: nextCount >= gonggu.targetParticipants ? "recruited" : gonggu.status
+    claimedQuantity: nextClaimed,
+    currentParticipants: gonggu.currentParticipants + 1,
+    status: nextClaimed >= gonggu.totalQuantity ? "recruited" : gonggu.status
   });
   batch.set(doc(collection(db, CHATS, gongguId, MESSAGES)), {
     gongguId,
     senderId: "system",
     senderName: "mogumogu",
-    text: `${user.nickname}님이 들어왔습니다.`,
+    text: `${user.nickname}님이 ${qty}개 참여했습니다.`,
     messageType: "system",
     createdAt: new Date().toISOString()
   });
@@ -121,6 +130,7 @@ export async function cancelParticipationDoc(gongguId: string, user: User): Prom
   if (!partSnap.exists()) {
     return;
   }
+  const leaving = partSnap.data() as Participation;
 
   const batch = writeBatch(db);
   batch.delete(partRef);
@@ -139,6 +149,7 @@ export async function cancelParticipationDoc(gongguId: string, user: User): Prom
     const gonggu = gongguSnap.data() as Gonggu;
     if (gonggu.status === "recruiting" || gonggu.status === "recruited") {
       batch.update(gongguRef, {
+        claimedQuantity: Math.max(0, gonggu.claimedQuantity - leaving.quantity),
         currentParticipants: Math.max(0, gonggu.currentParticipants - 1),
         status: "recruiting"
       });

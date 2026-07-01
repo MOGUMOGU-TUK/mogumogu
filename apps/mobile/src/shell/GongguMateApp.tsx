@@ -9,7 +9,6 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
-  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
@@ -39,35 +38,9 @@ import {
   joinGongguDoc,
   submitReviewDoc
 } from "../services/firebase/participationRepository";
-import type { ChatMessage, Gonggu, Review, User } from "../types/domain";
-
-/* ------------------------------------------------------------------ */
-/* Design tokens (모구모구.html 시안 기준)                              */
-/* ------------------------------------------------------------------ */
-
-const t = {
-  bg: "#F5F0F2",
-  card: "#FFFFFF",
-  ink: "#1C1A15",
-  inkSoft: "#3A372F",
-  muted: "#8A867C",
-  dim: "#B3A8AC",
-  line: "#EFE7EA",
-  border: "#E2D9DC",
-  pink: "#F7A1B5",
-  rose: "#EC5578",
-  roseSoft: "#FFF0F5",
-  roseInk: "#6E0C2D",
-  chipInk: "#6B6862",
-  urgentInk: "#E8542A",
-  urgentBg: "#FCE3D8",
-  calmBg: "#F0E8EB",
-  kakao: "#FEE500",
-  kakaoInk: "#191600",
-  greenInk: "#2F9E6B",
-  greenBg: "#E4F3EB",
-  trackOff: "#D4C8CC"
-};
+import type { ChatMessage, Gonggu, GongguStatus, Review, User } from "../types/domain";
+import { t } from "../shared/theme/theme";
+import { styles } from "./appStyles";
 
 const TEMP_STOPS = ["#5B9BD5", "#FFC247", "#EC5578"];
 
@@ -81,6 +54,7 @@ type Screen =
   | "home"
   | "map"
   | "detail"
+  | "chatList"
   | "chat"
   | "create"
   | "review"
@@ -90,12 +64,22 @@ type MainTab = "home" | "map" | "chat" | "mypage";
 
 type Deal = {
   id: string;
+  /** 공구 소유자(방장) 유저 id */
+  hostId: string;
+  /** 공구 상태 (canceled 필터·라벨용) */
+  status: GongguStatus;
+  /** 방장이 채팅 목록에서 숨겼는지 */
+  hostHidden: boolean;
   cat: string;
   title: string;
   store: string;
   total: number;
+  /** 확보된 수량 (진행률 기준) */
   cur: number;
+  /** 총 수량 */
   max: number;
+  /** 참여한 사람 수 (참고용) */
+  members: number;
   dist: string;
   deadline: string;
   urgent: boolean;
@@ -115,6 +99,14 @@ const HOME_FILTERS = ["전체", "베이커리", "식품", "간식", "생필품",
 const CREATE_CATS = ["베이커리", "식품", "간식", "생필품", "뷰티", "기타"];
 
 type ChatMsg = { type: "system" | "other" | "me"; name?: string; text: string; time?: string };
+
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onConfirm: () => void;
+};
 
 /* Gonggu → Deal 어댑터 */
 const CATEGORY_TINTS: Record<string, string> = {
@@ -138,12 +130,16 @@ function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
   const gReviews = reviews.filter((r) => r.gongguId === g.id);
   return {
     id: g.id,
+    hostId: g.hostUserId,
+    status: g.status,
+    hostHidden: !!g.hostHidden,
     cat: g.category || "기타",
     title: g.title,
     store: g.purchaseStore,
     total: g.totalPrice,
-    cur: g.currentParticipants,
-    max: g.targetParticipants,
+    cur: g.claimedQuantity,
+    max: g.totalQuantity,
+    members: g.currentParticipants,
     dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
     deadline: g.recruitmentDeadline,
     urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
@@ -200,10 +196,13 @@ type NotifKey = keyof NotifSettings;
 /* ------------------------------------------------------------------ */
 
 const fmt = (n: number) => `${Number(n).toLocaleString("ko-KR")}원`;
-const per = (d: Deal) => Math.ceil(d.total / d.max);
-const memberStr = (d: Deal) => `${d.cur}/${d.max}명`;
-const barPct = (d: Deal) => Math.round((d.cur / d.max) * 100);
-const remain = (d: Deal) => `앞으로 ${d.max - d.cur}명`;
+/** 1개당 가격 = ceil(총가격 / 총수량) */
+const unitPrice = (d: Deal) => Math.ceil(d.total / Math.max(1, d.max));
+/** 수량 진행 표시 (확보/총) */
+const qtyStr = (d: Deal) => `${d.cur}/${d.max}개`;
+const memberStr = (d: Deal) => `참여 ${d.members}명`;
+const barPct = (d: Deal) => Math.round((d.cur / Math.max(1, d.max)) * 100);
+const remain = (d: Deal) => `앞으로 ${Math.max(0, d.max - d.cur)}개`;
 const statusOf = (d: Deal) => (d.cur >= d.max ? "모집완료" : "모집중");
 const tempStr = (n: number) => `${n.toFixed(1)}°C`;
 
@@ -257,6 +256,7 @@ export function GongguMateApp() {
   const [joined, setJoined] = useState<string[]>([]);
   const [hearts, setHearts] = useState<string[]>([]);
   const [showJoin, setShowJoin] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState("");
 
   const [nickname, setNickname] = useState("");
@@ -267,7 +267,7 @@ export function GongguMateApp() {
   const [homeFilter, setHomeFilter] = useState("전체");
   const [createCat, setCreateCat] = useState("베이커리");
   const [cTotal, setCTotal] = useState("");
-  const [cMembers, setCMembers] = useState("4");
+  const [cQty, setCQty] = useState("10");
   const [cPickup, setCPickup] = useState("");
   const [cTime, setCTime] = useState("");
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
@@ -373,6 +373,22 @@ export function GongguMateApp() {
     [deals, mapSel]
   );
 
+  /* 취소(삭제)된 공구는 홈·지도 피드에서 제외 */
+  const feedDeals = useMemo(() => deals.filter((d) => d.status !== "canceled"), [deals]);
+
+  /* 내가 주최했거나 참여 중인 채팅방 (방장이 숨긴 방은 제외) */
+  const myRooms = useMemo(
+    () =>
+      deals.filter((d) => {
+        const isHost = d.hostId === currentUser.id;
+        const isPart = data.participations.some(
+          (p) => p.gongguId === d.id && p.userId === currentUser.id
+        );
+        return (isHost && !d.hostHidden) || isPart;
+      }),
+    [deals, data.participations, currentUser.id]
+  );
+
   useEffect(() => {
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -388,15 +404,16 @@ export function GongguMateApp() {
   /* Android 물리 뒤로가기 버튼 */
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (confirm) { setConfirm(null); return true; }
       if (showJoin) { setShowJoin(false); return true; }
       if (screen === "verify") { setScreen("login"); return true; }
       if (screen === "detail" || screen === "create" || screen === "review") { go(tab); return true; }
-      if (screen === "chat") { go(tab); return true; }
-      if (screen === "map" || screen === "mypage") { go("home", "home"); return true; }
+      if (screen === "chat") { go("chatList", "chat"); return true; }
+      if (screen === "chatList" || screen === "map" || screen === "mypage") { go("home", "home"); return true; }
       return false; // login / home → 시스템이 처리 (앱 종료)
     });
     return () => sub.remove();
-  }, [screen, tab, showJoin]);
+  }, [screen, tab, showJoin, confirm]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -409,13 +426,73 @@ export function GongguMateApp() {
     setScreen("detail");
   }
 
-  async function confirmJoin() {
+  function openRoom(id: string) {
+    setSelectedId(id);
+    setScreen("chat");
+  }
+
+  /* 내 글 삭제(작성자 한정): 소프트 취소 + 내 채팅 목록에서 숨김 */
+  function deletePost(deal: Deal) {
+    setConfirm({
+      title: "공구를 삭제할까요?",
+      message: "삭제하면 목록에서 사라지고 되돌릴 수 없어요.",
+      confirmLabel: "삭제",
+      danger: true,
+      onConfirm: async () => {
+        setConfirm(null);
+        if (isFirebaseConfigured()) {
+          try {
+            await cancelGongguDoc(deal.id, { hideForHost: true });
+          } catch {
+            showToast("삭제 중 오류가 발생했어요. 다시 시도해주세요.");
+            return;
+          }
+        }
+        setJoined((prev) => prev.filter((x) => x !== deal.id));
+        go("home", "home");
+        showToast("공구를 삭제했어요");
+      }
+    });
+  }
+
+  /* 채팅방 나가기: 방장은 목록에서 숨김, 참여자는 참여 취소 */
+  function leaveRoom(deal: Deal) {
+    const isHost = deal.hostId === currentUser.id;
+    setConfirm({
+      title: "채팅방을 나갈까요?",
+      message: isHost
+        ? "내 채팅 목록에서 이 방이 사라져요."
+        : "참여가 취소되고 채팅방에서 나가게 돼요.",
+      confirmLabel: "나가기",
+      danger: true,
+      onConfirm: async () => {
+        setConfirm(null);
+        if (isFirebaseConfigured()) {
+          try {
+            if (isHost) {
+              await hideGongguChatDoc(deal.id);
+            } else {
+              await cancelParticipationDoc(deal.id, currentUser);
+            }
+          } catch {
+            showToast("나가기 중 오류가 발생했어요. 다시 시도해주세요.");
+            return;
+          }
+        }
+        setJoined((prev) => prev.filter((x) => x !== deal.id));
+        go("chatList", "chat");
+        showToast("채팅방에서 나갔어요");
+      }
+    });
+  }
+
+  async function confirmJoin(quantity: number) {
     if (!selectedId) return;
     if (isFirebaseConfigured()) {
       try {
-        await joinGongguDoc(selectedId, currentUser);
-      } catch {
-        showToast("참여 중 오류가 발생했어요. 다시 시도해주세요.");
+        await joinGongguDoc(selectedId, currentUser, quantity);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "참여 중 오류가 발생했어요. 다시 시도해주세요.");
         return;
       }
     }
@@ -448,10 +525,10 @@ export function GongguMateApp() {
             title: `${createCat} 공구`,
             category: createCat,
             totalPrice: Number(cTotal) || 0,
-            targetParticipants: Number(cMembers) || 4,
+            totalQuantity: Number(cQty) || 1,
             pickupPlaceName: cPickup || "장소 미정",
             pickupExpectedTime: cTime || "시간 미정",
-            splitMethod: "1/N 균등 분배",
+            splitMethod: "수량 기준 비례 분담",
             recruitmentDeadline: "미정"
           },
           currentUser
@@ -480,7 +557,7 @@ export function GongguMateApp() {
     showToast("후기가 등록됐어요. 고마워요!");
   }
 
-  const showNav = (["home", "map", "chat", "mypage"] as Screen[]).includes(screen);
+  const showNav = (["home", "map", "chatList", "chat", "mypage"] as Screen[]).includes(screen);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -525,7 +602,7 @@ export function GongguMateApp() {
 
             {screen === "home" && (
               <HomeScreen
-                deals={deals}
+                deals={feedDeals}
                 filter={homeFilter}
                 onFilter={setHomeFilter}
                 onOpen={openDeal}
@@ -534,7 +611,7 @@ export function GongguMateApp() {
 
             {screen === "map" && (
               <MapScreen
-                deals={deals}
+                deals={feedDeals}
                 mapSel={mapSel}
                 pick={mapPick}
                 onPickMarker={setMapSel}
@@ -548,17 +625,23 @@ export function GongguMateApp() {
                 deal={sel}
                 hearted={hearts.includes(sel.id)}
                 joined={joined.includes(sel.id)}
+                isHost={sel.hostId === currentUser.id}
                 onBack={() => go(tab)}
                 onHeart={() =>
                   setHearts((prev) =>
                     prev.includes(sel.id) ? prev.filter((x) => x !== sel.id) : [...prev, sel.id]
                   )
                 }
+                onDelete={() => deletePost(sel)}
                 onCta={() => {
-                  if (joined.includes(sel.id)) go("chat");
+                  if (joined.includes(sel.id)) openRoom(sel.id);
                   else setShowJoin(true);
                 }}
               />
+            )}
+
+            {screen === "chatList" && (
+              <ChatListScreen rooms={myRooms} meId={currentUser.id} onOpen={openRoom} onLeave={leaveRoom} />
             )}
 
             {screen === "chat" &&
@@ -566,8 +649,9 @@ export function GongguMateApp() {
                 <ChatScreen
                   deal={sel}
                   messages={chatMsgs}
-                  onBack={() => go(tab)}
+                  onBack={() => go("chatList", "chat")}
                   onSend={sendMessage}
+                  onLeave={() => leaveRoom(sel)}
                 />
               ) : (
                 <EmptyState
@@ -582,11 +666,11 @@ export function GongguMateApp() {
                 cat={createCat}
                 onCat={setCreateCat}
                 total={cTotal}
-                members={cMembers}
+                qty={cQty}
                 pickup={cPickup}
                 time={cTime}
                 onTotal={setCTotal}
-                onMembers={setCMembers}
+                onQty={setCQty}
                 onPickup={setCPickup}
                 onTime={setCTime}
                 onBack={() => go(tab)}
@@ -629,17 +713,28 @@ export function GongguMateApp() {
 
           {showNav && (
             <BottomNav
-              active={screen as MainTab}
+              active={(screen === "chatList" ? "chat" : screen) as MainTab}
               onHome={() => go("home", "home")}
               onMap={() => go("map", "map")}
               onCreate={() => setScreen("create")}
-              onChat={() => go("chat", "chat")}
+              onChat={() => go("chatList", "chat")}
               onMy={() => go("mypage", "mypage")}
             />
           )}
 
           {showJoin && sel && (
             <JoinSheet deal={sel} onClose={() => setShowJoin(false)} onConfirm={confirmJoin} />
+          )}
+
+          {confirm && (
+            <ConfirmSheet
+              title={confirm.title}
+              message={confirm.message}
+              confirmLabel={confirm.confirmLabel}
+              danger={confirm.danger}
+              onConfirm={confirm.onConfirm}
+              onClose={() => setConfirm(null)}
+            />
           )}
 
           {!!toast && (
@@ -1319,9 +1414,9 @@ function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void }) {
         <Text style={styles.dealStore}>{deal.store}</Text>
         <View style={{ marginTop: 6 }}>
           <View style={[styles.rowBetween, { marginBottom: 5 }]}>
-            <Text style={styles.dealPrice}>1인 {fmt(per(deal))}</Text>
+            <Text style={styles.dealPrice}>1개당 {fmt(unitPrice(deal))}</Text>
             <Text style={styles.dealMeta}>
-              {memberStr(deal)} · {remain(deal)}
+              {qtyStr(deal)} · {remain(deal)}
             </Text>
           </View>
           <ProgressBar pct={barPct(deal)} />
@@ -1388,7 +1483,7 @@ function MapScreen({
             ]}
           >
             <Text style={{ fontSize: 13, fontWeight: "800", color: on ? "#fff" : t.ink }}>
-              {fmt(per(d))}
+              {fmt(unitPrice(d))}
             </Text>
           </Pressable>
         );
@@ -1423,9 +1518,9 @@ function MapScreen({
               {pick.title}
             </Text>
             <Text style={styles.dealStore}>
-              {pick.spot} · {memberStr(pick)}
+              {pick.spot} · {qtyStr(pick)}
             </Text>
-            <Text style={[styles.dealPrice, { marginTop: 3 }]}>1인 {fmt(per(pick))}</Text>
+            <Text style={[styles.dealPrice, { marginTop: 3 }]}>1개당 {fmt(unitPrice(pick))}</Text>
           </View>
         </Pressable>
         <Pressable style={styles.mapSheetButton} onPress={onOpen}>
@@ -1445,15 +1540,19 @@ function DetailScreen({
   deal,
   hearted,
   joined,
+  isHost,
   onBack,
   onHeart,
+  onDelete,
   onCta
 }: {
   deal: Deal;
   hearted: boolean;
   joined: boolean;
+  isHost: boolean;
   onBack: () => void;
   onHeart: () => void;
+  onDelete: () => void;
   onCta: () => void;
 }) {
   return (
@@ -1463,6 +1562,11 @@ function DetailScreen({
           <Pressable style={styles.detailBack} onPress={onBack}>
             <Text style={styles.backArrow}>‹</Text>
           </Pressable>
+          {isHost && (
+            <Pressable style={styles.detailDelete} onPress={onDelete}>
+              <Text style={styles.detailDeleteText}>삭제</Text>
+            </Pressable>
+          )}
           <Text style={styles.detailHeroLabel}>[ 상품 사진 ]</Text>
         </View>
 
@@ -1498,13 +1602,13 @@ function DetailScreen({
           <View style={styles.priceCard}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
               <View>
-                <Text style={styles.fieldHint}>예상 1인 부담금</Text>
-                <Text style={styles.priceBig}>{fmt(per(deal))}</Text>
+                <Text style={styles.fieldHint}>1개당 가격</Text>
+                <Text style={styles.priceBig}>{fmt(unitPrice(deal))}</Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <Text style={styles.fieldHint}>총 {fmt(deal.total)}</Text>
                 <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink, marginTop: 2 }}>
-                  {memberStr(deal)} 모집
+                  {qtyStr(deal)} 확보 · {memberStr(deal)}
                 </Text>
               </View>
             </View>
@@ -1512,7 +1616,7 @@ function DetailScreen({
               <ProgressBar pct={barPct(deal)} />
             </View>
             <Text style={{ fontSize: 12, fontWeight: "600", color: t.chipInk, marginTop: 7 }}>
-              {remain(deal)}이면 모집 완료돼요!
+              {remain(deal)} 남았어요!
             </Text>
           </View>
 
@@ -1603,16 +1707,73 @@ function GradientBar({ ratio, knobColor }: { ratio: number; knobColor: string })
 /* Chat                                                                */
 /* ------------------------------------------------------------------ */
 
+function ChatListScreen({
+  rooms,
+  meId,
+  onOpen,
+  onLeave
+}: {
+  rooms: Deal[];
+  meId: string;
+  onOpen: (id: string) => void;
+  onLeave: (deal: Deal) => void;
+}) {
+  return (
+    <View style={styles.flex}>
+      <View style={styles.listHeader}>
+        <Text style={styles.listHeaderTitle}>채팅</Text>
+      </View>
+      {rooms.length === 0 ? (
+        <EmptyState
+          emoji="💬"
+          title="참여 중인 채팅이 없어요"
+          desc={"공구에 참여하면 채팅방이 열려요.\n홈에서 마음에 드는 공구를 찾아보세요!"}
+        />
+      ) : (
+        <ScrollView contentContainerStyle={styles.roomList}>
+          {rooms.map((room) => {
+            const ended = room.status === "canceled";
+            const isHost = room.hostId === meId;
+            return (
+              <View key={room.id} style={styles.roomRow}>
+                <Pressable
+                  style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }}
+                  onPress={() => onOpen(room.id)}
+                >
+                  <View style={[styles.roomThumb, { backgroundColor: room.tint }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.roomTitle} numberOfLines={1}>
+                      {room.title}
+                    </Text>
+                    <Text style={styles.roomMeta} numberOfLines={1}>
+                      {isHost ? "내 공구" : "참여 중"} · {ended ? "종료됨" : qtyStr(room)}
+                    </Text>
+                  </View>
+                </Pressable>
+                <Pressable style={styles.roomLeaveBtn} onPress={() => onLeave(room)}>
+                  <Text style={styles.roomLeaveText}>나가기</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 function ChatScreen({
   deal,
   messages,
   onBack,
-  onSend
+  onSend,
+  onLeave
 }: {
   deal: Deal;
   messages: ChatMsg[];
   onBack: () => void;
   onSend: (text: string) => void;
+  onLeave: () => void;
 }) {
   const [input, setInput] = useState("");
 
@@ -1633,11 +1794,13 @@ function ChatScreen({
           <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }} numberOfLines={1}>
             {deal.title}
           </Text>
-          <Text style={{ fontSize: 12, color: t.muted }}>참여자 {memberStr(deal)}</Text>
+          <Text style={{ fontSize: 12, color: t.muted }}>
+            {memberStr(deal)} · {statusOf(deal)}
+          </Text>
         </View>
-        <View style={[styles.tagPill, { backgroundColor: t.roseSoft }]}>
-          <Text style={{ fontSize: 11, fontWeight: "700", color: t.rose }}>{statusOf(deal)}</Text>
-        </View>
+        <Pressable style={styles.chatLeaveBtn} onPress={onLeave}>
+          <Text style={styles.chatLeaveText}>나가기</Text>
+        </Pressable>
       </View>
 
       <ScrollView style={styles.chatBody} contentContainerStyle={{ padding: 14, gap: 10 }}>
@@ -1713,11 +1876,11 @@ function CreateScreen({
   cat,
   onCat,
   total,
-  members,
+  qty,
   pickup,
   time,
   onTotal,
-  onMembers,
+  onQty,
   onPickup,
   onTime,
   onBack,
@@ -1726,17 +1889,17 @@ function CreateScreen({
   cat: string;
   onCat: (c: string) => void;
   total: string;
-  members: string;
+  qty: string;
   pickup: string;
   time: string;
   onTotal: (v: string) => void;
-  onMembers: (v: string) => void;
+  onQty: (v: string) => void;
   onPickup: (v: string) => void;
   onTime: (v: string) => void;
   onBack: () => void;
   onPost: () => void | Promise<void>;
 }) {
-  const perPerson = fmt(Math.ceil((Number(total) || 0) / (Number(members) || 1)));
+  const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
 
   return (
     <View style={styles.flex}>
@@ -1810,22 +1973,22 @@ function CreateScreen({
             </View>
           </View>
           <View style={{ width: 108 }}>
-            <Text style={styles.fieldLabel}>모집 인원</Text>
+            <Text style={styles.fieldLabel}>총 수량</Text>
             <View style={styles.suffixField}>
               <TextInput
-                value={members}
-                onChangeText={onMembers}
+                value={qty}
+                onChangeText={onQty}
                 keyboardType="number-pad"
                 style={styles.suffixInput}
               />
-              <Text style={styles.suffix}>명</Text>
+              <Text style={styles.suffix}>개</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.perPersonBox}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: t.roseInk }}>예상 1인 부담금</Text>
-          <Text style={{ fontSize: 20, fontWeight: "800", color: t.rose }}>{perPerson}</Text>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: t.roseInk }}>1개당 가격</Text>
+          <Text style={{ fontSize: 20, fontWeight: "800", color: t.rose }}>{perUnit}</Text>
         </View>
 
         <View style={{ flexDirection: "row", gap: 11 }}>
@@ -2136,6 +2299,43 @@ function NavItem({
 /* Join bottom sheet                                                   */
 /* ------------------------------------------------------------------ */
 
+function ConfirmSheet({
+  title,
+  message,
+  confirmLabel,
+  danger,
+  onConfirm,
+  onClose
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+      <Pressable style={styles.sheet} onPress={() => {}}>
+        <View style={styles.sheetGrabber} />
+        <Text style={{ fontSize: 19, fontWeight: "800", color: t.ink }}>{title}</Text>
+        <Text style={{ fontSize: 14, color: t.muted, marginTop: 8, lineHeight: 20 }}>{message}</Text>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
+          <Pressable style={[styles.pillButton, styles.confirmCancel]} onPress={onClose}>
+            <Text style={[styles.pillButtonText, { color: t.ink }]}>취소</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.pillButton, { flex: 1, backgroundColor: danger ? t.rose : t.pink }]}
+            onPress={onConfirm}
+          >
+            <Text style={[styles.pillButtonText, { color: "#fff" }]}>{confirmLabel}</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Pressable>
+  );
+}
+
 function JoinSheet({
   deal,
   onClose,
@@ -2143,8 +2343,13 @@ function JoinSheet({
 }: {
   deal: Deal;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (quantity: number) => void;
 }) {
+  const remaining = Math.max(0, deal.max - deal.cur);
+  const [qty, setQty] = useState(remaining > 0 ? 1 : 0);
+  const price = unitPrice(deal);
+  const canJoin = remaining > 0 && qty > 0;
+
   return (
     <Pressable style={styles.sheetBackdrop} onPress={onClose}>
       <Pressable style={styles.sheet} onPress={() => {}}>
@@ -2154,17 +2359,47 @@ function JoinSheet({
 
         <View style={styles.sheetSummary}>
           <View style={styles.rowBetween}>
-            <Text style={{ fontSize: 14, color: t.chipInk }}>총 가격</Text>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: t.ink }}>{fmt(deal.total)}</Text>
+            <Text style={{ fontSize: 14, color: t.chipInk }}>총 가격 · 총 수량</Text>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: t.ink }}>
+              {fmt(deal.total)} · {deal.max}개
+            </Text>
           </View>
           <View style={styles.rowBetween}>
-            <Text style={{ fontSize: 14, color: t.chipInk }}>모집 인원</Text>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: t.ink }}>{deal.max}명</Text>
+            <Text style={{ fontSize: 14, color: t.chipInk }}>1개당 가격</Text>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: t.ink }}>{fmt(price)}</Text>
           </View>
+
           <View style={styles.sheetDivider} />
+
           <View style={[styles.rowBetween, { alignItems: "center" }]}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }}>내 부담금 (1/N)</Text>
-            <Text style={{ fontSize: 22, fontWeight: "800", color: t.rose }}>{fmt(per(deal))}</Text>
+            <View>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }}>참여 수량</Text>
+              <Text style={{ fontSize: 12, color: t.muted, marginTop: 2 }}>남은 수량 {remaining}개</Text>
+            </View>
+            <View style={styles.stepper}>
+              <Pressable
+                style={styles.stepperBtn}
+                onPress={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={!canJoin || qty <= 1}
+              >
+                <Text style={styles.stepperSign}>−</Text>
+              </Pressable>
+              <Text style={styles.stepperValue}>{qty}</Text>
+              <Pressable
+                style={styles.stepperBtn}
+                onPress={() => setQty((q) => Math.min(remaining, q + 1))}
+                disabled={!canJoin || qty >= remaining}
+              >
+                <Text style={styles.stepperSign}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.sheetDivider} />
+
+          <View style={[styles.rowBetween, { alignItems: "center" }]}>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: t.ink }}>내 부담금</Text>
+            <Text style={{ fontSize: 22, fontWeight: "800", color: t.rose }}>{fmt(price * qty)}</Text>
           </View>
         </View>
 
@@ -2174,567 +2409,16 @@ function JoinSheet({
           </Text>
         </View>
 
-        <Pressable style={[styles.pillButton, { backgroundColor: t.pink, marginTop: 16 }]} onPress={onConfirm}>
-          <Text style={[styles.pillButtonText, { color: "#fff" }]}>참여 확정하기</Text>
+        <Pressable
+          style={[styles.pillButton, { backgroundColor: canJoin ? t.pink : t.trackOff, marginTop: 16 }]}
+          onPress={() => canJoin && onConfirm(qty)}
+          disabled={!canJoin}
+        >
+          <Text style={[styles.pillButtonText, { color: "#fff" }]}>
+            {canJoin ? `${qty}개 참여 확정하기` : "모집이 완료됐어요"}
+          </Text>
         </Pressable>
       </Pressable>
     </Pressable>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Styles                                                              */
-/* ------------------------------------------------------------------ */
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: t.bg },
-  flex: { flex: 1 },
-  root: { flex: 1, backgroundColor: t.bg },
-  rootWeb: { width: "100%", maxWidth: 480, alignSelf: "center" },
-  body: { flex: 1, minHeight: 0 },
-  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-
-  /* empty state */
-  emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, paddingVertical: 60, gap: 10 },
-  emptyEmoji: { fontSize: 44, marginBottom: 4 },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: t.ink, textAlign: "center" },
-  emptyDesc: { fontSize: 14, color: t.muted, lineHeight: 20, textAlign: "center" },
-
-  /* login */
-  loginWrap: { flex: 1, paddingHorizontal: 28, paddingTop: "8%", paddingBottom: "4%", backgroundColor: "#FEF4F7" },
-  loginHero: { flex: 1, alignItems: "center", justifyContent: "center", gap: 22 },
-  logoCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: t.pink,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#E73C64",
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.4,
-    shadowRadius: 30,
-    elevation: 12
-  },
-  logoEmoji: { fontSize: 38 },
-  loginTitle: { fontSize: 30, fontWeight: "800", color: t.ink, letterSpacing: -0.5 },
-  loginSubtitle: { fontSize: 15, color: t.muted, lineHeight: 22, textAlign: "center" },
-  authButton: {
-    height: 54,
-    borderRadius: 27,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 4,
-  },
-  authButtonText: { fontSize: 16, fontWeight: "700" },
-
-  /* verify */
-  verifyWrap: { flex: 1, paddingHorizontal: 28, paddingTop: 14, paddingBottom: 24 },
-  stepRow: { flexDirection: "row", gap: 6, marginBottom: 30 },
-  stepBar: { height: 4, flex: 1, borderRadius: 2 },
-  verifyTitle: { fontSize: 24, fontWeight: "800", color: t.ink, letterSpacing: -0.4, lineHeight: 33 },
-  verifyDesc: { fontSize: 14, color: t.muted, marginTop: 10, lineHeight: 21 },
-  verifyCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 6 },
-  nickField: {
-    marginTop: 34,
-    borderBottomWidth: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingBottom: 10
-  },
-  nickInput: { flex: 1, fontSize: 20, fontWeight: "600", color: t.ink, padding: 0 },
-  locateCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#FFF0F5",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  doneCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: t.pink,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  eduBadge: {
-    marginTop: 18,
-    backgroundColor: t.calmBg,
-    borderRadius: 11,
-    paddingVertical: 11,
-    paddingHorizontal: 16
-  },
-
-  /* shared buttons */
-  pillButton: { height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" },
-  pillButtonText: { fontSize: 16, fontWeight: "700" },
-
-  /* home */
-  homeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 12
-  },
-  locButton: { flexDirection: "row", alignItems: "center", gap: 5 },
-  locText: { fontSize: 19, fontWeight: "800", color: t.ink },
-  chevron: { fontSize: 18, color: t.ink, fontWeight: "700" },
-  headerIcon: { fontSize: 20 },
-  bellDot: {
-    position: "absolute",
-    top: -1,
-    right: -1,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: t.rose
-  },
-  chipScroll: { flexShrink: 0, flexGrow: 0 },
-  chipRow: { gap: 8, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10, alignItems: "center" },
-  filterChip: {
-    flexShrink: 0,
-    flexGrow: 0,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    borderWidth: 1
-  },
-  dealList: { gap: 11, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 80 },
-  dealCard: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 12,
-    flexDirection: "row",
-    gap: 13,
-    shadowColor: "#28180F",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2
-  },
-  dealThumb: {
-    width: 86,
-    height: 86,
-    borderRadius: 13,
-    justifyContent: "flex-end",
-    padding: 7,
-    overflow: "hidden"
-  },
-  thumbTag: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.6)",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2
-  },
-  thumbTagText: { fontSize: 10, fontWeight: "700", color: "rgba(0,0,0,0.34)" },
-  deadlinePill: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  dealTitle: { fontSize: 15, fontWeight: "700", color: t.ink, marginTop: 2, lineHeight: 20 },
-  dealStore: { fontSize: 12, color: t.muted, marginTop: 1 },
-  dealPrice: { fontSize: 15, fontWeight: "800", color: t.rose },
-  dealMeta: { fontSize: 11, fontWeight: "600", color: t.chipInk },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: t.line, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: 3, backgroundColor: t.rose },
-
-  /* map */
-  mapWrap: { flex: 1, backgroundColor: "#E8EDE6", overflow: "hidden" },
-  mapRoad: {
-    position: "absolute",
-    left: "-10%",
-    width: "120%",
-    height: 46,
-    backgroundColor: "#F3EDEF"
-  },
-  mapBlockA: {
-    position: "absolute",
-    left: "8%",
-    top: "40%",
-    width: 90,
-    height: 80,
-    borderRadius: 18,
-    backgroundColor: "#D7E4CE"
-  },
-  mapBlockB: {
-    position: "absolute",
-    right: "10%",
-    bottom: "24%",
-    width: 70,
-    height: 70,
-    borderRadius: 14,
-    backgroundColor: "#D7E4CE"
-  },
-  youOuter: {
-    position: "absolute",
-    left: "48%",
-    top: "46%",
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(42,111,219,0.18)",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  youDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#2A6FDB", borderWidth: 3, borderColor: "#fff" },
-  mapMarker: {
-    position: "absolute",
-    borderWidth: 2,
-    borderColor: "#fff",
-    borderRadius: 16,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    shadowColor: "#28180F",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4
-  },
-  mapTopBar: {
-    position: "absolute",
-    top: 14,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center"
-  },
-  mapPill: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    shadowColor: "#28180F",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 3
-  },
-  mapSheet: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 14,
-    shadowColor: "#28180F",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 34,
-    elevation: 10
-  },
-  mapSheetThumb: { width: 64, height: 64, borderRadius: 13 },
-  mapSheetTitle: { fontSize: 15, fontWeight: "700", color: t.ink, marginTop: 3 },
-  mapSheetButton: {
-    height: 44,
-    marginTop: 12,
-    borderRadius: 12,
-    backgroundColor: t.pink,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-
-  /* detail */
-  detailHero: { height: 280, justifyContent: "center", alignItems: "center" },
-  detailBack: {
-    position: "absolute",
-    top: 14,
-    left: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  backArrow: { fontSize: 30, color: t.ink, lineHeight: 32, marginTop: -2 },
-  detailHeroLabel: { fontFamily: Platform.OS === "ios" ? "Courier" : "monospace", fontSize: 13, color: "rgba(0,0,0,0.3)" },
-  detailSheet: {
-    flex: 1,
-    backgroundColor: t.bg,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    marginTop: -20,
-    paddingHorizontal: 20,
-    paddingTop: 18
-  },
-  tagPill: { borderRadius: 9, paddingHorizontal: 9, paddingVertical: 3 },
-  detailTitle: { fontSize: 21, fontWeight: "800", color: t.ink, marginTop: 11, lineHeight: 28 },
-  priceCard: { backgroundColor: "#fff", borderRadius: 16, padding: 16, marginTop: 16 },
-  fieldHint: { fontSize: 12, color: t.muted },
-  priceBig: { fontSize: 26, fontWeight: "800", color: t.rose, marginTop: 2 },
-  infoCard: { backgroundColor: "#fff", borderRadius: 16, paddingHorizontal: 16, marginTop: 11 },
-  infoRow: { flexDirection: "row", gap: 12, paddingVertical: 13 },
-  infoRowDivider: { borderBottomWidth: 1, borderBottomColor: t.line },
-  infoRowLabel: { fontSize: 13, color: t.muted, width: 68 },
-  infoRowValue: { fontSize: 13, fontWeight: "600", color: t.ink, flex: 1 },
-  detailDesc: { fontSize: 14, color: t.inkSoft, lineHeight: 22, marginTop: 16 },
-  trustCard: { backgroundColor: "#fff", borderRadius: 16, padding: 15, marginTop: 16, marginBottom: 18 },
-  leaderAvatar: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
-  ctaBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: t.line,
-    paddingHorizontal: 20,
-    paddingVertical: 12
-  },
-  heartButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "#EBE2E5",
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  ctaButton: { flex: 1, height: 52, borderRadius: 14, backgroundColor: t.pink, alignItems: "center", justifyContent: "center" },
-
-  /* gradient bar */
-  gradientWrap: { justifyContent: "center" },
-  gradientTrack: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden" },
-  gradientKnob: {
-    position: "absolute",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#fff",
-    borderWidth: 2.5,
-    marginLeft: -7
-  },
-
-  /* chat */
-  chatHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    backgroundColor: "#fff",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: t.line
-  },
-  chatHeaderThumb: { width: 38, height: 38, borderRadius: 11 },
-  chatBody: { flex: 1, backgroundColor: t.bg },
-  systemMsg: {
-    fontSize: 12,
-    color: t.muted,
-    backgroundColor: "#E9E1E4",
-    paddingVertical: 6,
-    paddingHorizontal: 13,
-    borderRadius: 20,
-    overflow: "hidden",
-    textAlign: "center"
-  },
-  msgName: { fontSize: 11, color: t.muted, marginBottom: 3, marginLeft: 4 },
-  bubble: { paddingVertical: 9, paddingHorizontal: 13 },
-  bubbleMe: { backgroundColor: t.pink, borderRadius: 16, borderTopRightRadius: 4 },
-  bubbleOther: { backgroundColor: "#fff", borderRadius: 16, borderTopLeftRadius: 4 },
-  msgTime: { fontSize: 10, color: t.dim },
-  composer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    backgroundColor: "#fff",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderTopWidth: 1,
-    borderTopColor: t.line
-  },
-  composerInputWrap: {
-    flex: 1,
-    backgroundColor: t.calmBg,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    height: 42,
-    justifyContent: "center"
-  },
-  composerInput: { fontSize: 14, color: t.ink, padding: 0 },
-  sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: t.pink,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-
-  /* simple header (create/review) */
-  simpleHeader: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 8, paddingHorizontal: 16 },
-  simpleHeaderTitle: { fontSize: 18, fontWeight: "800", color: t.ink },
-
-  /* create */
-  createBody: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 18, gap: 18 },
-  fieldLabel: { fontSize: 13, fontWeight: "700", color: t.ink },
-  photoAdd: {
-    width: 72,
-    height: 72,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: "#D4C8CC",
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3
-  },
-  photoThumb: { width: 72, height: 72, borderRadius: 13 },
-  createInput: {
-    marginTop: 8,
-    height: 46,
-    borderWidth: 1,
-    borderColor: t.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    backgroundColor: "#fff",
-    color: t.ink
-  },
-  catChip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1 },
-  suffixField: {
-    marginTop: 8,
-    height: 46,
-    borderWidth: 1,
-    borderColor: t.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff"
-  },
-  suffixInput: { flex: 1, fontSize: 14, fontWeight: "600", color: t.ink, padding: 0 },
-  suffix: { fontSize: 13, color: t.muted },
-  perPersonBox: {
-    backgroundColor: t.roseSoft,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  stickyFooter: { backgroundColor: t.bg, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
-  footerButton: { height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-
-  /* review */
-  reviewAvatar: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center" },
-  reviewHeadline: { fontSize: 18, fontWeight: "800", color: t.ink, marginTop: 12, textAlign: "center", lineHeight: 25 },
-
-  /* mypage */
-  myBody: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 80 },
-  myTitle: { fontSize: 20, fontWeight: "800", color: t.ink, paddingTop: 6, paddingBottom: 16 },
-  profileCard: { backgroundColor: "#fff", borderRadius: 18, padding: 18 },
-  profileAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#FEE0EA",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  eduChip: { backgroundColor: t.greenBg, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  editButton: { borderWidth: 1, borderColor: t.border, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12 },
-  statCard: { flex: 1, backgroundColor: "#fff", borderRadius: 20, padding: 15, alignItems: "center" },
-  mySection: { fontSize: 13, fontWeight: "700", color: t.ink, marginTop: 22, marginBottom: 9 },
-  reviewTag: { backgroundColor: "#fff", borderRadius: 11, paddingVertical: 8, paddingHorizontal: 13 },
-  notifCard: { backgroundColor: "#fff", borderRadius: 16, paddingHorizontal: 16 },
-  notifRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14 },
-  toggleTrack: { width: 46, height: 27, borderRadius: 14, justifyContent: "center" },
-  toggleKnob: {
-    position: "absolute",
-    top: 3,
-    width: 21,
-    height: 21,
-    borderRadius: 11,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2
-  },
-  reviewDemoButton: {
-    marginTop: 16,
-    backgroundColor: t.calmBg,
-    borderRadius: 13,
-    paddingVertical: 14,
-    alignItems: "center"
-  },
-
-  /* bottom nav */
-  nav: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: t.line,
-    paddingTop: 8,
-    paddingHorizontal: 8,
-    /* paddingBottom is set dynamically via useSafeAreaInsets */
-  },
-  navItem: { flex: 1, alignItems: "center", justifyContent: "flex-start", minHeight: 46, gap: 3 },
-  navCenter: { flex: 1, alignItems: "center", justifyContent: "flex-start" },
-  fab: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: t.pink,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: -10,
-    shadowColor: "#E73C64",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    elevation: 10
-  },
-
-  /* join sheet */
-  sheetBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(28,26,21,0.45)",
-    justifyContent: "flex-end"
-  },
-  sheet: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 22,
-    paddingTop: 8,
-    paddingBottom: 26
-  },
-  sheetGrabber: { width: 38, height: 4, borderRadius: 2, backgroundColor: t.border, alignSelf: "center", marginVertical: 6, marginBottom: 18 },
-  sheetSummary: { backgroundColor: t.bg, borderRadius: 16, padding: 16, marginTop: 18, gap: 11 },
-  sheetDivider: { height: 1, backgroundColor: "#E6DDE0" },
-  sheetNote: { flexDirection: "row", gap: 9, backgroundColor: t.roseSoft, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 12 },
-
-  /* toast */
-  toast: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 96,
-    alignItems: "center"
-  },
-  toastText: {
-    backgroundColor: t.ink,
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    borderRadius: 13,
-    overflow: "hidden"
-  }
-});

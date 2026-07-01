@@ -17,8 +17,8 @@ export function getCurrentUser(snapshot: AppSnapshot): User {
   return currentUser;
 }
 
-export function getPricePerPerson(gonggu: Gonggu) {
-  return Math.ceil(gonggu.totalPrice / gonggu.targetParticipants);
+export function getUnitPrice(gonggu: Gonggu) {
+  return Math.ceil(gonggu.totalPrice / Math.max(1, gonggu.totalQuantity));
 }
 
 export function findParticipation(snapshot: AppSnapshot, gongguId: string, userId: string) {
@@ -27,10 +27,26 @@ export function findParticipation(snapshot: AppSnapshot, gongguId: string, userI
   );
 }
 
-export function joinGonggu(snapshot: AppSnapshot, gongguId: string, userId: string): AppSnapshot {
+export function joinGonggu(
+  snapshot: AppSnapshot,
+  gongguId: string,
+  userId: string,
+  quantity: number
+): AppSnapshot {
   if (findParticipation(snapshot, gongguId, userId)) {
     return snapshot;
   }
+
+  const target = snapshot.gonggus.find((item) => item.id === gongguId);
+  if (!target) {
+    return snapshot;
+  }
+  const qty = Math.max(1, Math.floor(quantity));
+  const remaining = target.totalQuantity - target.claimedQuantity;
+  if (qty > remaining) {
+    return snapshot;
+  }
+  const unitPrice = getUnitPrice(target);
 
   const now = new Date().toISOString();
   const nextGonggus = snapshot.gonggus.map((gonggu) => {
@@ -38,11 +54,12 @@ export function joinGonggu(snapshot: AppSnapshot, gongguId: string, userId: stri
       return gonggu;
     }
 
-    const nextCount = Math.min(gonggu.currentParticipants + 1, gonggu.targetParticipants);
+    const nextClaimed = gonggu.claimedQuantity + qty;
     return {
       ...gonggu,
-      currentParticipants: nextCount,
-      status: nextCount >= gonggu.targetParticipants ? "recruited" : gonggu.status
+      claimedQuantity: nextClaimed,
+      currentParticipants: gonggu.currentParticipants + 1,
+      status: nextClaimed >= gonggu.totalQuantity ? "recruited" : gonggu.status
     } satisfies Gonggu;
   });
 
@@ -53,6 +70,8 @@ export function joinGonggu(snapshot: AppSnapshot, gongguId: string, userId: stri
     paymentStatus: "confirmed",
     pickupConfirmationStatus: "pending",
     reviewStatus: "required",
+    quantity: qty,
+    amount: unitPrice * qty,
     joinedAt: now
   };
 
@@ -95,6 +114,7 @@ export function cancelParticipation(snapshot: AppSnapshot, gongguId: string, use
 
       return {
         ...gonggu,
+        claimedQuantity: Math.max(0, gonggu.claimedQuantity - participation.quantity),
         currentParticipants: Math.max(0, gonggu.currentParticipants - 1),
         status: "recruiting"
       };
@@ -226,7 +246,7 @@ export function createGonggu(
   input: {
     title: string;
     totalPrice: number;
-    targetParticipants: number;
+    totalQuantity: number;
     pickupPlaceName: string;
     pickupExpectedTime: string;
   }
@@ -234,7 +254,8 @@ export function createGonggu(
   const currentUser = getCurrentUser(snapshot);
   const id = `gonggu_${snapshot.gonggus.length + 1}`;
   const settlementId = `settlement_${snapshot.settlements.length + 1}`;
-  const pricePerPerson = Math.ceil(input.totalPrice / input.targetParticipants);
+  const totalQuantity = Math.max(1, input.totalQuantity);
+  const unitPrice = Math.ceil(input.totalPrice / totalQuantity);
   const now = new Date().toISOString();
 
   const gonggu: Gonggu = {
@@ -247,9 +268,10 @@ export function createGonggu(
     hostTrustScore: currentUser.trustScore,
     purchaseStore: "",
     totalPrice: input.totalPrice,
-    targetParticipants: input.targetParticipants,
-    currentParticipants: 1,
-    splitMethod: "참여 인원 기준 1/N 소분",
+    totalQuantity,
+    claimedQuantity: 0,
+    currentParticipants: 0,
+    splitMethod: "수량 기준 비례 분담",
     pickupPlaceName: input.pickupPlaceName,
     pickupDistanceMeters: 300,
     pickupExpectedTime: input.pickupExpectedTime,
@@ -265,8 +287,8 @@ export function createGonggu(
     gongguId: id,
     hostUserId: currentUser.id,
     totalAmount: input.totalPrice,
-    pricePerPerson,
-    participantCount: input.targetParticipants,
+    unitPrice,
+    totalQuantity,
     mode: "mock",
     status: "pending",
     releaseCondition: "all_pickup_confirmed_and_reviews_completed"
