@@ -41,8 +41,8 @@ const KAKAO_TIMEOUT_MS = 5_000;
 
 function gpsTimeoutMessage(): string {
   return Platform.OS === "web"
-    ? "위치 확인 시간이 초과됐어요. 브라우저 주소창 옆 위치 권한을 허용했는지 확인해 주세요."
-    : "위치 확인 시간이 초과됐어요. 에뮬레이터면 터미널에서 adb emu geo fix 126.9527 37.4812 실행 후 다시 시도해 주세요.";
+    ? "브라우저에서 위치 권한을 허용했는지 확인해 주세요."
+    : "시간이 초과됐어요.";
 }
 
 /** 카카오 coord2regioncode 서비스 가능 대략 범위 (WGS84) */
@@ -91,7 +91,7 @@ export function mapLocationError(error: unknown): string {
   ) {
     return Platform.OS === "web"
       ? "브라우저에서 위치 권한을 허용해 주세요."
-      : "위치(GPS)를 켜 주세요. 에뮬레이터는 터미널에서 adb emu geo fix 경도 위도 실행 후 다시 시도해 주세요.";
+      : "위치(GPS)를 켜 주세요.";
   }
 
   if (message.includes("timeout") || message.includes("초과") || message.includes("NOT_KOREA")) {
@@ -222,7 +222,7 @@ async function resolveNeighborhoodFromKakao(
 
   if (!isInKorea(latitude, longitude)) {
     throw new Error(
-      "한국 밖 좌표예요. 에뮬레이터면 adb emu geo fix 경도 위도 로 한국 좌표를 넣어 주세요."
+      "한국 밖 좌표예요. 다시 시도해 주세요."
     );
   }
 
@@ -241,7 +241,7 @@ async function resolveNeighborhoodFromKakao(
       const err = (await response.json()) as { msg?: string; code?: number };
       if (err.code === -2) {
         throw new Error(
-          "한국 밖 좌표예요. 에뮬레이터면 adb emu geo fix 경도 위도 로 한국 좌표를 넣어 주세요."
+          "한국 밖 좌표예요. 다시 시도해 주세요."
         );
       }
       detail = err.msg ? ` (${err.msg})` : "";

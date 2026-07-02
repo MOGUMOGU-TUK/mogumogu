@@ -249,6 +249,8 @@ export function createGonggu(
     totalQuantity: number;
     pickupPlaceName: string;
     pickupExpectedTime: string;
+    pickupLatitude?: number;
+    pickupLongitude?: number;
   }
 ): AppSnapshot {
   const currentUser = getCurrentUser(snapshot);
@@ -273,6 +275,12 @@ export function createGonggu(
     currentParticipants: 0,
     splitMethod: "수량 기준 비례 분담",
     pickupPlaceName: input.pickupPlaceName,
+    ...(input.pickupLatitude != null && input.pickupLongitude != null
+      ? {
+          pickupLatitude: input.pickupLatitude,
+          pickupLongitude: input.pickupLongitude
+        }
+      : {}),
     pickupDistanceMeters: 300,
     pickupExpectedTime: input.pickupExpectedTime,
     recruitmentDeadline: "오늘 23:59",

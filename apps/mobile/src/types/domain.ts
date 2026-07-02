@@ -57,6 +57,10 @@ export type Gonggu = {
   currentParticipants: number;
   splitMethod: string;
   pickupPlaceName: string;
+  /** 픽업 장소 위도 (공구 작성 시 인증 위치 등). 없으면 지도 핀 미표시. */
+  pickupLatitude?: number;
+  /** 픽업 장소 경도 */
+  pickupLongitude?: number;
   pickupDistanceMeters: number;
   pickupExpectedTime: string;
   recruitmentDeadline: string;

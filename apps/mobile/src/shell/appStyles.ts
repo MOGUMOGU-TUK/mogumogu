@@ -218,6 +218,23 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center"
   },
+  mapOverlayBanner: {
+    position: "absolute",
+    top: 64,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(26, 26, 26, 0.82)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14
+  },
+  mapOverlayText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "center",
+    lineHeight: 18
+  },
   mapPill: {
     backgroundColor: "#fff",
     borderRadius: 12,

@@ -30,6 +30,8 @@ import {
   formatVerifiedLocationBrief,
   type VerifiedLocation
 } from "../services/location/verifyNeighborhood";
+import { isWithinRadiusKm } from "../services/location/geo";
+import { KakaoMapView } from "../components/KakaoMapView";
 import { sendMessageDoc } from "../services/firebase/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
@@ -89,6 +91,44 @@ type Screen =
 
 type MainTab = "home" | "map" | "chat" | "mypage";
 
+type Deal = {
+  id: string;
+  /** 공구 소유자(방장) 유저 id */
+  hostId: string;
+  /** 공구 상태 (canceled 필터·라벨용) */
+  status: GongguStatus;
+  /** 방장이 채팅 목록에서 숨겼는지 */
+  hostHidden: boolean;
+  cat: string;
+  title: string;
+  store: string;
+  total: number;
+  /** 확보된 수량 (진행률 기준) */
+  cur: number;
+  /** 총 수량 */
+  max: number;
+  /** 참여한 사람 수 (참고용) */
+  members: number;
+  dist: string;
+  deadline: string;
+  urgent: boolean;
+  spot: string;
+  pickup: string;
+  leader: string;
+  temp: number;
+  deals: number;
+  reviews: number;
+  noshow: number;
+  tint: string;
+  method: string;
+  desc: string;
+  pickupLat?: number;
+  pickupLng?: number;
+};
+
+const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
+const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
+
 type ChatMsg = {
   type: "system" | "other" | "me";
   name?: string;
@@ -104,12 +144,47 @@ type ConfirmState = {
   onConfirm: () => void;
 };
 
-function mapPos(id: string): { left: string; top: string } {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const left = 18 + Math.round(((h & 0xff) / 255) * 62);
-  const top = 14 + Math.round((((h >> 8) & 0xff) / 255) * 64);
-  return { left: `${left}%`, top: `${top}%` };
+/* Gonggu → Deal 어댑터 */
+const CATEGORY_TINTS: Record<string, string> = {
+  식품: "#CFE2EC",
+  생활: "#D8E0CC",
+  패션: "#E8D5E5",
+  반려동물: "#F3DEC4",
+  "가구·인테리어": "#E4D9CE",
+  스포츠: "#CDE7E0",
+  기타: "#EEE0E5",
+};
+
+function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
+  const gReviews = reviews.filter((r) => r.gongguId === g.id);
+  return {
+    id: g.id,
+    hostId: g.hostUserId,
+    status: g.status,
+    hostHidden: !!g.hostHidden,
+    cat: g.category || "기타",
+    title: g.title,
+    store: g.purchaseStore,
+    total: g.totalPrice,
+    cur: g.claimedQuantity,
+    max: g.totalQuantity,
+    members: g.currentParticipants,
+    dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
+    deadline: g.recruitmentDeadline,
+    urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
+    spot: g.pickupPlaceName,
+    pickup: g.pickupExpectedTime,
+    leader: g.hostNickname,
+    temp: g.hostTrustScore,
+    deals: 0,
+    reviews: gReviews.length,
+    noshow: 0,
+    tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
+    method: g.splitMethod,
+    desc: g.description,
+    pickupLat: g.pickupLatitude,
+    pickupLng: g.pickupLongitude,
+  };
 }
 
 function chatMsgFromDomain(m: ChatMessage, myId: string): ChatMsg {
@@ -347,15 +422,32 @@ export function GongguMateApp() {
     () => deals.find((d) => d.id === selectedId) ?? deals[0] ?? null,
     [deals, selectedId],
   );
-  const mapPick = useMemo(
-    () => deals.find((d) => d.id === mapSel) ?? deals[0] ?? null,
-    [deals, mapSel],
-  );
 
   /* 취소(삭제)된 공구는 홈·지도 피드에서 제외 */
   const feedDeals = useMemo(
     () => deals.filter((d) => d.status !== "canceled"),
     [deals],
+  );
+
+  /* 지도: 좌표 있고 인증 위치 1km 이내 공구만 */
+  const mapDeals = useMemo(() => {
+    const withCoords = feedDeals.filter(
+      (d) => d.pickupLat != null && d.pickupLng != null,
+    );
+    if (!verifiedLocation) return withCoords;
+    return withCoords.filter((d) =>
+      isWithinRadiusKm(
+        verifiedLocation.latitude,
+        verifiedLocation.longitude,
+        d.pickupLat!,
+        d.pickupLng!,
+      ),
+    );
+  }, [feedDeals, verifiedLocation]);
+
+  const mapPick = useMemo(
+    () => mapDeals.find((d) => d.id === mapSel) ?? mapDeals[0] ?? null,
+    [mapDeals, mapSel],
   );
 
   /* 내가 주최했거나 참여 중인 채팅방 (방장이 숨긴 방은 제외) */
@@ -535,20 +627,31 @@ export function GongguMateApp() {
   }
 
   async function handleCreate() {
-    const input = {
-      title: cTitle.trim() || `${createCat} 공구`,
-      category: createCat,
-      totalPrice: Number(cTotal) || 0,
-      totalQuantity: Number(cQty) || 1,
-      pickupPlaceName: cPickup || "장소 미정",
-      pickupExpectedTime: cTime || "시간 미정",
-      splitMethod: "수량 기준 비례 분담",
-      recruitmentDeadline: "미정",
-    };
-
-    if (!isFirebaseConfigured()) {
-      showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
+    if (!verifiedLocation) {
+      showToast("동네 인증 후 공구를 만들 수 있어요.");
       return;
+    }
+    if (isFirebaseConfigured()) {
+      try {
+        await createGongguDoc(
+          {
+            title: cTitle.trim() || `${createCat} 공구`,
+            category: createCat,
+            totalPrice: Number(cTotal) || 0,
+            totalQuantity: Number(cQty) || 1,
+            pickupPlaceName: cPickup || "장소 미정",
+            pickupLatitude: verifiedLocation.latitude,
+            pickupLongitude: verifiedLocation.longitude,
+            pickupExpectedTime: cTime || "시간 미정",
+            splitMethod: "수량 기준 비례 분담",
+            recruitmentDeadline: "미정",
+          },
+          currentUser,
+        );
+      } catch {
+        showToast("공구 생성에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
     }
 
     try {
@@ -677,7 +780,8 @@ export function GongguMateApp() {
 
             {screen === "map" && (
               <MapScreen
-                deals={deals}
+                deals={mapDeals}
+                verifiedLocation={verifiedLocation}
                 locationLabel={verifiedLocationLabel}
                 mapSel={mapSel}
                 pick={mapPick}
@@ -1923,6 +2027,7 @@ function ProgressBar({ pct }: { pct: number }) {
 
 function MapScreen({
   deals,
+  verifiedLocation,
   locationLabel,
   mapSel,
   pick,
@@ -1931,6 +2036,7 @@ function MapScreen({
   onOpen,
 }: {
   deals: Deal[];
+  verifiedLocation: VerifiedLocation | null;
   locationLabel: string;
   mapSel: string;
   pick: Deal | null;
@@ -1938,62 +2044,45 @@ function MapScreen({
   onList: () => void;
   onOpen: () => void;
 }) {
+  const mapCenter = verifiedLocation
+    ? { lat: verifiedLocation.latitude, lng: verifiedLocation.longitude }
+    : { lat: 37.4812, lng: 126.9527 };
+
+  const markers = useMemo(
+    () =>
+      deals.map((d) => ({
+        id: d.id,
+        lat: d.pickupLat!,
+        lng: d.pickupLng!,
+        label: fmt(unitPrice(d)),
+        selected: d.id === mapSel,
+      })),
+    [deals, mapSel],
+  );
+
   return (
     <View style={styles.mapWrap}>
-      {/* faux roads / blocks */}
-      <View
-        style={[
-          styles.mapRoad,
-          { top: "18%", transform: [{ rotate: "-14deg" }] },
-        ]}
+      <KakaoMapView
+        center={mapCenter}
+        markers={markers}
+        onMarkerPress={onPickMarker}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      <View
-        style={[
-          styles.mapRoad,
-          { top: "62%", height: 38, transform: [{ rotate: "8deg" }] },
-        ]}
-      />
-      <View style={styles.mapBlockA} />
-      <View style={styles.mapBlockB} />
 
-      {/* you marker */}
-      <View style={styles.youOuter}>
-        <View style={styles.youDot} />
-      </View>
-
-      {deals.map((d) => {
-        const on = d.id === mapSel;
-        const pos = mapPos(d.id);
-        return (
-          <Pressable
-            key={d.id}
-            onPress={() => onPickMarker(d.id)}
-            style={[
-              styles.mapMarker,
-              {
-                left: pos.left as any,
-                top: pos.top as any,
-                backgroundColor: on ? t.pink : "#fff",
-              },
-            ]}
-          >
-            <Text
-              style={{
-                fontSize: 13,
-                fontWeight: "800",
-                color: on ? "#fff" : t.ink,
-              }}
-            >
-              {fmt(unitPrice(d))}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {!verifiedLocation && (
+        <View style={styles.mapOverlayBanner}>
+          <Text style={styles.mapOverlayText}>
+            동네 인증 후 내 위치 기준 지도를 이용할 수 있어요
+          </Text>
+        </View>
+      )}
 
       {/* top bar */}
       <View style={styles.mapTopBar}>
         <View style={styles.mapPill}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>{locationLabel} · 반경 1km</Text>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>
+            {locationLabel} · 반경 1km
+          </Text>
         </View>
         <Pressable style={styles.mapPill} onPress={onList}>
           <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>
