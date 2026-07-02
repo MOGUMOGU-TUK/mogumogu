@@ -348,12 +348,18 @@ export function GongguMateApp() {
     }
   }, [deals, selectedId]);
 
-  /* Google 로그인 성공 시 자동 진입 */
+  /* Google 등 소셜 로그인 성공 시 카카오와 동일하게 닉네임·동네 인증으로 이동 */
   useEffect(() => {
+    if (skipSocialAutoVerifyRef.current) return;
     if (screen === "login" && auth.user && !auth.user.isAnonymous) {
-      go("home", "home");
+      if (auth.user.displayName && !nickname.trim()) {
+        setNickname(auth.user.displayName.slice(0, 12));
+      }
+      setVerifyStep(0);
+      setLocateError(null);
+      setScreen("verify");
     }
-  }, [auth.user, screen]);
+  }, [auth.user, screen, nickname]);
 
   /* 로그인 후 FCM 토큰 등록 + 알림 설정 로드 */
   useEffect(() => {
@@ -450,6 +456,7 @@ export function GongguMateApp() {
   );
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSocialAutoVerifyRef = useRef(false);
 
   const sel = useMemo(
     () => deals.find((d) => d.id === selectedId) ?? deals[0] ?? null,
@@ -503,6 +510,7 @@ export function GongguMateApp() {
         return true;
       }
       if (screen === "verify") {
+        skipSocialAutoVerifyRef.current = true;
         setScreen("login");
         return true;
       }
@@ -712,6 +720,9 @@ export function GongguMateApp() {
                 onVerify={() => {
                   setVerifyStep(0);
                   setScreen("verify");
+                }}
+                onGoogleLogin={() => {
+                  skipSocialAutoVerifyRef.current = false;
                 }}
                 onPeek={() => go("home", "home")}
               />
@@ -1534,10 +1545,12 @@ function CameraIcon({
 function LoginScreen({
   auth,
   onVerify,
+  onGoogleLogin,
   onPeek,
 }: {
   auth: UseFirebaseAuth;
   onVerify: () => void;
+  onGoogleLogin: () => void;
   onPeek: () => void;
 }) {
   const { height } = useWindowDimensions();
@@ -1551,8 +1564,9 @@ function LoginScreen({
   }
 
   function handleGoogle() {
+    onGoogleLogin();
     void auth.signInGoogle();
-    /* Google 로그인 성공 시 useEffect에서 자동 진입 */
+    /* 로그인 성공 시 useEffect에서 verify 화면으로 이동 */
   }
 
   return (
