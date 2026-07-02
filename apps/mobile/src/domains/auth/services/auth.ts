@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { Platform } from "react-native";
 
-import { getFirebaseServices } from "./client";
+import { getFirebaseServices } from "../../../services/firebase/client";
 
 export type AuthUser = {
   uid: string;

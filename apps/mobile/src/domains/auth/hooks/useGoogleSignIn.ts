@@ -5,7 +5,7 @@ import {
 import { GoogleAuthProvider, signInWithCredential, signInWithPopup } from "firebase/auth";
 import { Platform } from "react-native";
 
-import { getFirebaseServices } from "../../services/firebase/client";
+import { getFirebaseServices } from "../../../services/firebase/client";
 
 const WEB_CLIENT_ID =
   "1081542232878-55rg64hqcomi6dbmt5qcp3q5jr2lptl3.apps.googleusercontent.com";

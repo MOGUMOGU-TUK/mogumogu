@@ -6,8 +6,8 @@ import {
   subscribeAuth,
   toAuthUser,
   type AuthUser
-} from "../../services/firebase/auth";
-import { getFirebaseServices } from "../../services/firebase/client";
+} from "../services/auth";
+import { getFirebaseServices } from "../../../services/firebase/client";
 import { useGoogleSignIn } from "./useGoogleSignIn";
 
 export type { AuthUser };

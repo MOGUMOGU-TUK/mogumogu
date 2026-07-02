@@ -1,6 +1,6 @@
 import { Pressable, Text, useWindowDimensions, View } from "react-native";
 
-import type { UseFirebaseAuth } from "../../../features/auth/useFirebaseAuth";
+import type { UseFirebaseAuth } from "../hooks/useFirebaseAuth";
 import { t } from "../../../shared/theme/theme";
 import { BasketIcon, GoogleGIcon, KakaoIcon } from "../../../shared/ui/icons";
 import { styles } from "../../../shell/appStyles";

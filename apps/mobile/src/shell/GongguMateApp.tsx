@@ -14,7 +14,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-import { useFirebaseAuth } from "../features/auth/useFirebaseAuth";
+import { useFirebaseAuth } from "../domains/auth/hooks/useFirebaseAuth";
 import { useChatMessages } from "../domains/chat/hooks/useChatMessages";
 import { useFirestoreData } from "../features/data/useFirestoreData";
 import {
