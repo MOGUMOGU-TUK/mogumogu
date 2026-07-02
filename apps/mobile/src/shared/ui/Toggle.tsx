@@ -1,7 +1,7 @@
 import { Pressable, View } from "react-native";
 
 import { t } from "../theme/theme";
-import { styles } from "../../shell/appStyles";
+import { styles } from "./appStyles";
 
 export function Toggle({ on, onPress }: { on: boolean; onPress: () => void }) {
   return (

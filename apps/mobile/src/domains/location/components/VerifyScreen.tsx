@@ -2,7 +2,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { t } from "../../../shared/theme/theme";
 import { MapPinIcon } from "../../../shared/ui/icons";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 
 export function VerifyScreen({
   step,

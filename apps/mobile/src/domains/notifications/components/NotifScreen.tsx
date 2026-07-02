@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { BellIcon } from "../../../shared/ui/icons";
 import { t } from "../../../shared/theme/theme";
 import { relativeTime } from "../../../shared/utils/time";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import type { Deal } from "../../gonggu/types";
 import { TYPE_LABEL, type NotifItem } from "../types";
 

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { EmptyState } from "../../../shared/ui/EmptyState";
 import { t } from "../../../shared/theme/theme";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import { HOME_FILTERS, type Deal } from "../types";
 import { DealCard } from "./DealCard";
 

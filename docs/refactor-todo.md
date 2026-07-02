@@ -33,12 +33,12 @@ apps/mobile/src/
 - [x] **6-1 gonggu**: `Deal` 타입, `DealCard`, `HomeScreen`, `DetailScreen`, `CreateScreen`, `JoinSheet`, `useFirestoreData`, `gongguRepository`, `participationRepository`
 - [x] **6-2 chat**: `ChatListScreen`, `ChatScreen`, `ChatMsg`, `chatMsgFromDomain`, `SEED_MSGS`, `useChatMessages`, `chatRepository`
 - [x] **6-3 notifications**: `NotifScreen`, `notificationService`, `NotifKey`/`NotifItem`/`NOTIF_ITEMS`/`TYPE_LABEL`
-- [ ] **6-4 location**: `VerifyScreen`(완료) — **남음**: `verifyNeighborhood` 서비스를 `services/location` → `domains/location/services`로 이동
+- [x] **6-4 location**: `VerifyScreen`, `verifyNeighborhood` 서비스(`services/location` → `domains/location/services`로 이동 완료)
 - [x] **6-5 auth**: `LoginScreen`, `useFirebaseAuth`, `useGoogleSignIn`, auth service
 - [x] **6-6 map**: `MapScreen`, `mapPos`
 - [x] **6-7 review**: `ReviewScreen`, `REVIEW_QUESTIONS`, `ReviewKey` (제출 로직 `submitReviewDoc`은 participationRepository 유지)
 - [x] **6-8 mypage**: `MyPageScreen`(+`StatCard`/`ReviewTag`), `Toggle`(→shared/ui)
-- [ ] **6-9 app/AppShell.tsx**: **남음** — 아래 "남은 작업" 참고. 현재 `BottomNav`/`ConfirmSheet`는 분리 완료, 루트 오케스트레이터(state·handler·effect)는 아직 `shell/GongguMateApp.tsx`(≈720줄)에 있고 `app/AppShell.tsx`는 이를 감싸는 wrapper.
+- [x] **6-9 app/AppShell.tsx**: 루트 오케스트레이터(state·파생데이터·handler·effect·render 스위치)를 `app/AppShell.tsx`로 흡수 완료. `shell/GongguMateApp.tsx`·`shell/` 폴더 삭제, `appStyles`는 `shared/ui/appStyles.ts`로 이동. `App.tsx`는 `app/AppShell` 직접 사용.
 
 **분리 원칙:** `shared`에는 도메인 의미 없는 UI/포맷터/테마만. 각 도메인 폴더엔 그 도메인의 화면·훅·서비스·유틸·타입.
 
@@ -46,23 +46,24 @@ apps/mobile/src/
 
 ## 진행 현황 (2026-07-02 기준, 브랜치 `refac/GongguMateApp`)
 
-`GongguMateApp.tsx`는 3,362줄 → **약 720줄**(루트 오케스트레이터만 남음)로 축소됨. 매 단계 `npm run typecheck` 통과 후 커밋. 완료 커밋: 앱 셸 스캐폴딩 → chat → map → review → notifications → 공용 바/색 유틸 → mypage → BottomNav·ConfirmSheet → auth 이동 → gonggu 데이터 이동.
+**6단계 폴더 재구성 완료.** `shell/GongguMateApp.tsx`(3,362줄로 시작 → 780줄까지 축소)의 루트 오케스트레이터를 `app/AppShell.tsx`로 흡수하고 `shell/` 폴더를 삭제함. 이제 도메인 트리(`app/` + `domains/*` + `shared/*` + 인프라 `services/*`)만 남음. 매 단계 `npm run typecheck` 통과. 검증 게이트(typecheck·test·functions:build·export:web) 전부 통과.
 
 ### 확정된 구조 결정
 - `Deal` 타입은 `domains/gonggu/types.ts`. chat/map/review/notifications가 여기서 import (gonggu = 핵심 도메인).
 - `services/firebase/client.ts`, `services/mock/seed.ts`는 **도메인 무관 인프라로 현 위치 유지**.
-- `appStyles`는 아직 `shell/appStyles.ts`에 있고 모든 컴포넌트가 `shell/appStyles`로 import 중 → 6-9에서 `shared/ui/appStyles.ts`로 이동 예정.
+- `appStyles`는 `shared/ui/appStyles.ts`로 이동 완료. 전 컴포넌트가 새 경로로 import.
 - `ProgressBar`/`TemperatureGradientBar`/`Toggle`/`EmptyState`/`ConfirmSheet` → `shared/ui`. `BottomNav` → `app/components`.
+- `verifyNeighborhood` → `domains/location/services`로 이동 완료. 미사용 `services/mock/mockRepository.ts` 삭제.
 
-### 남은 작업 (다음 세션에서 이어서)
-1. **6-4 잔여**: `git mv services/location/verifyNeighborhood.ts → domains/location/services/`, 루트 import 경로(`../services/location/...` → `../domains/location/services/...`) 갱신. verifyNeighborhood를 쓰는 곳은 루트뿐.
-2. **미사용 파일 제거**: `services/mock/mockRepository.ts` (import 하는 곳 없음). 제거 후 빈 `services/mock`은 seed.ts만 남음.
-3. **6-9 AppShell 흡수 (핵심 마무리)**:
-   - `shell/GongguMateApp.tsx`의 루트 컴포넌트(state·파생데이터·handler·effect·render 스위치)를 `app/AppShell.tsx`로 이동, `export function AppShell()`가 실제 조립자가 되도록. 모든 화면을 도메인에서 import (이미 대부분 import 형태라 본문 이동만 하면 됨).
-   - `shell/appStyles.ts → shared/ui/appStyles.ts` 이동 + 전 파일 import 경로(`../../shell/appStyles`, `../../../shell/appStyles`, `./appStyles`) 일괄 갱신. **주의**: import 경로 대소문자 — Windows는 관대하나 번들러/CI는 엄격.
-   - `shell/GongguMateApp.tsx` 삭제, `shell/` 폴더 제거 (App.tsx는 이미 `app/AppShell` 사용).
-4. **버그 수정 (Bug1, 리팩토링과 독립)**: `domains/auth/hooks/useFirebaseAuth.ts`의 `signInGoogle()`이 Firebase 미설정 시 조용히 return → 안내 메시지 노출로 변경. 미설정 시 `setState({ status: "disabled", user: null, error: "Firebase 설정이 필요해요. apps/mobile/.env 설정 후 Google 로그인을 사용할 수 있어요." })`. LoginScreen이 이미 `auth.error`를 인라인 렌더하므로 UI 변경 불필요. `Alert.alert` 금지(웹 no-op). **Bug2(공구 생성 거짓 성공)는 커밋 `1f4f0ca`에서 이미 수정됨.**
-5. **검증 게이트**: `npm run typecheck` + `npm run functions:build` + `npm --prefix apps/mobile run test` + `npm run export:web` + 시드 모드 런타임 스모크(로그인→둘러보기→홈/상세/지도/채팅/마이, Google 버튼 안내 표시).
+### 이번 세션에서 완료
+1. **6-4 잔여**: `verifyNeighborhood.ts`를 `domains/location/services/`로 이동, 루트 import 경로 갱신.
+2. **미사용 파일 제거**: `services/mock/mockRepository.ts` 삭제(빈 `services/location` 폴더도 정리). `services/mock`엔 seed.ts만 남음.
+3. **6-9 AppShell 흡수**: 루트 컴포넌트를 `app/AppShell.tsx`로 이동(`export function AppShell()`이 실제 조립자), `appStyles`를 `shared/ui`로 이동 + 전 파일 import 경로 일괄 갱신, `shell/` 폴더 삭제. 미사용 `Image`·`updateGongguDoc` import도 정리.
+4. **Bug1**: `useFirebaseAuth.signInGoogle()`이 Firebase 미설정 시 조용히 return → `error` 안내 메시지를 세팅하도록 변경. (LoginScreen은 이미 `auth.status === "disabled"`를 감지해 토스트를 띄우므로, 이 변경은 훅 자체를 호출부와 독립적으로 견고하게 만드는 방어 로직.)
+
+### 남은 작업 (다음 세션)
+- **런타임 스모크(수동)**: 시드 모드로 로그인→둘러보기→홈/상세/지도/채팅/마이, Google 버튼 미설정 안내 표시 확인.
+- **7단계 최소 테스트**: 아래 참고. `--passWithNoTests` 탈출.
 
 ### 정리한 부채
 - `EmptyState` 중복 제거(HomeScreen 로컬 복사본 → shared/ui 통합) 완료.

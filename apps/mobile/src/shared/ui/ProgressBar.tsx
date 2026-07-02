@@ -1,6 +1,6 @@
 import { View } from "react-native";
 
-import { styles } from "../../shell/appStyles";
+import { styles } from "./appStyles";
 
 export function ProgressBar({ pct }: { pct: number }) {
   return (

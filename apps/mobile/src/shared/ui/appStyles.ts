@@ -1,6 +1,6 @@
 import { Platform, StyleSheet } from "react-native";
 
-import { t } from "../shared/theme/theme";
+import { t } from "../theme/theme";
 
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: t.bg },

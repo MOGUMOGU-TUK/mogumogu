@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { SendArrowIcon } from "../../../shared/ui/icons";
 import { t } from "../../../shared/theme/theme";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import type { Deal } from "../../gonggu/types";
 import { memberStr, statusOf } from "../../gonggu/utils";
 import type { ChatMsg } from "../types";

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { t } from "../../../shared/theme/theme";
 import { TemperatureGradientBar as GradientBar } from "../../../shared/ui/TemperatureGradientBar";
 import { Toggle } from "../../../shared/ui/Toggle";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import { tempRatio } from "../../gonggu/utils";
 import { NOTIF_ITEMS, type NotifKey } from "../../notifications/types";
 

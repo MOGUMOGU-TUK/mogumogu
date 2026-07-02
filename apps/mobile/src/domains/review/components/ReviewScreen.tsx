@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { t } from "../../../shared/theme/theme";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import type { Deal } from "../../gonggu/types";
 import type { ReviewKey } from "../types";
 

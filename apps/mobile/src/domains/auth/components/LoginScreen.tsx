@@ -3,7 +3,7 @@ import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import type { UseFirebaseAuth } from "../hooks/useFirebaseAuth";
 import { t } from "../../../shared/theme/theme";
 import { BasketIcon, GoogleGIcon, KakaoIcon } from "../../../shared/ui/icons";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 
 export function LoginScreen({
   auth,

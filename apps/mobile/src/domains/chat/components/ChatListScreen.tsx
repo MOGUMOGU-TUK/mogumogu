@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { EmptyState } from "../../../shared/ui/EmptyState";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import type { Deal } from "../../gonggu/types";
 import { qtyStr } from "../../gonggu/utils";
 

@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-import { styles } from "../../shell/appStyles";
+import { styles } from "./appStyles";
 
 export function EmptyState({
   emoji,

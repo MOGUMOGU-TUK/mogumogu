@@ -9,7 +9,7 @@ import {
   MapPinIcon,
   PersonIcon,
 } from "../../shared/ui/icons";
-import { styles } from "../../shell/appStyles";
+import { styles } from "../../shared/ui/appStyles";
 import type { MainTab } from "../navigationTypes";
 
 export function BottomNav({

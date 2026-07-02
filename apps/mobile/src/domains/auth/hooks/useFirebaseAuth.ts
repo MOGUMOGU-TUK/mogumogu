@@ -81,7 +81,15 @@ export function useFirebaseAuth(): UseFirebaseAuth {
   const googleSignIn = useGoogleSignIn(setError, resetLoading);
 
   function signInGoogle() {
-    if (!getFirebaseServices()) return;
+    if (!getFirebaseServices()) {
+      setState({
+        status: "disabled",
+        user: null,
+        error:
+          "Firebase 설정이 필요해요. apps/mobile/.env 설정 후 Google 로그인을 사용할 수 있어요.",
+      });
+      return;
+    }
     setState((prev) => ({ ...prev, status: "loading", error: null }));
     googleSignIn.promptAsync();
   }

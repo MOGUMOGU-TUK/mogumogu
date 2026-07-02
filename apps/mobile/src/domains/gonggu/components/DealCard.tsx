@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 
 import { t } from "../../../shared/theme/theme";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import type { Deal } from "../types";
 import { barPct, fmt, qtyStr, remain, unitPrice } from "../utils";
 import { ProgressBar } from "../../../shared/ui/ProgressBar";

@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 
 import { t } from "../../../shared/theme/theme";
-import { styles } from "../../../shell/appStyles";
+import { styles } from "../../../shared/ui/appStyles";
 import type { Deal } from "../../gonggu/types";
 import { fmt, qtyStr, unitPrice } from "../../gonggu/utils";
 import { mapPos } from "../utils";
