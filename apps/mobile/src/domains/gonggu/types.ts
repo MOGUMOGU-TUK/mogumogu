@@ -31,6 +31,8 @@ export type Deal = {
   tint: string;
   method: string;
   desc: string;
+  pickupLat?: number;
+  pickupLng?: number;
 };
 
 export const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];

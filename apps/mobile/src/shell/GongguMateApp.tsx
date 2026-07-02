@@ -91,44 +91,6 @@ type Screen =
 
 type MainTab = "home" | "map" | "chat" | "mypage";
 
-type Deal = {
-  id: string;
-  /** 공구 소유자(방장) 유저 id */
-  hostId: string;
-  /** 공구 상태 (canceled 필터·라벨용) */
-  status: GongguStatus;
-  /** 방장이 채팅 목록에서 숨겼는지 */
-  hostHidden: boolean;
-  cat: string;
-  title: string;
-  store: string;
-  total: number;
-  /** 확보된 수량 (진행률 기준) */
-  cur: number;
-  /** 총 수량 */
-  max: number;
-  /** 참여한 사람 수 (참고용) */
-  members: number;
-  dist: string;
-  deadline: string;
-  urgent: boolean;
-  spot: string;
-  pickup: string;
-  leader: string;
-  temp: number;
-  deals: number;
-  reviews: number;
-  noshow: number;
-  tint: string;
-  method: string;
-  desc: string;
-  pickupLat?: number;
-  pickupLng?: number;
-};
-
-const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
-const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
-
 type ChatMsg = {
   type: "system" | "other" | "me";
   name?: string;
@@ -143,49 +105,6 @@ type ConfirmState = {
   danger?: boolean;
   onConfirm: () => void;
 };
-
-/* Gonggu → Deal 어댑터 */
-const CATEGORY_TINTS: Record<string, string> = {
-  식품: "#CFE2EC",
-  생활: "#D8E0CC",
-  패션: "#E8D5E5",
-  반려동물: "#F3DEC4",
-  "가구·인테리어": "#E4D9CE",
-  스포츠: "#CDE7E0",
-  기타: "#EEE0E5",
-};
-
-function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
-  const gReviews = reviews.filter((r) => r.gongguId === g.id);
-  return {
-    id: g.id,
-    hostId: g.hostUserId,
-    status: g.status,
-    hostHidden: !!g.hostHidden,
-    cat: g.category || "기타",
-    title: g.title,
-    store: g.purchaseStore,
-    total: g.totalPrice,
-    cur: g.claimedQuantity,
-    max: g.totalQuantity,
-    members: g.currentParticipants,
-    dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
-    deadline: g.recruitmentDeadline,
-    urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
-    spot: g.pickupPlaceName,
-    pickup: g.pickupExpectedTime,
-    leader: g.hostNickname,
-    temp: g.hostTrustScore,
-    deals: 0,
-    reviews: gReviews.length,
-    noshow: 0,
-    tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
-    method: g.splitMethod,
-    desc: g.description,
-    pickupLat: g.pickupLatitude,
-    pickupLng: g.pickupLongitude,
-  };
-}
 
 function chatMsgFromDomain(m: ChatMessage, myId: string): ChatMsg {
   if (m.messageType === "system") return { type: "system", text: m.text };
@@ -631,27 +550,23 @@ export function GongguMateApp() {
       showToast("동네 인증 후 공구를 만들 수 있어요.");
       return;
     }
-    if (isFirebaseConfigured()) {
-      try {
-        await createGongguDoc(
-          {
-            title: cTitle.trim() || `${createCat} 공구`,
-            category: createCat,
-            totalPrice: Number(cTotal) || 0,
-            totalQuantity: Number(cQty) || 1,
-            pickupPlaceName: cPickup || "장소 미정",
-            pickupLatitude: verifiedLocation.latitude,
-            pickupLongitude: verifiedLocation.longitude,
-            pickupExpectedTime: cTime || "시간 미정",
-            splitMethod: "수량 기준 비례 분담",
-            recruitmentDeadline: "미정",
-          },
-          currentUser,
-        );
-      } catch {
-        showToast("공구 생성에 실패했어요. 다시 시도해주세요.");
-        return;
-      }
+
+    const input = {
+      title: cTitle.trim() || `${createCat} 공구`,
+      category: createCat,
+      totalPrice: Number(cTotal) || 0,
+      totalQuantity: Number(cQty) || 1,
+      pickupPlaceName: cPickup || "장소 미정",
+      pickupLatitude: verifiedLocation.latitude,
+      pickupLongitude: verifiedLocation.longitude,
+      pickupExpectedTime: cTime || "시간 미정",
+      splitMethod: "수량 기준 비례 분담",
+      recruitmentDeadline: "미정",
+    };
+
+    if (!isFirebaseConfigured()) {
+      showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
+      return;
     }
 
     try {
@@ -730,7 +645,6 @@ export function GongguMateApp() {
                 onGoogleLogin={() => {
                   skipSocialAutoVerifyRef.current = false;
                 }}
-                onPeek={() => go("home", "home")}
               />
             )}
 
