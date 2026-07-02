@@ -155,7 +155,6 @@ mogumogu/
 bun install                 # 또는 npm install
 npm run web                 # 웹 프리뷰 (가장 빠름)
 npm run ios                 # iOS 시뮬레이터
-npm run firebase:seed       # Firestore 데모 데이터 시드 (1회)
 ```
 
 ### 환경 변수

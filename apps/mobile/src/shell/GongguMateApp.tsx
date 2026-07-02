@@ -1,4 +1,3 @@
-import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -50,17 +49,26 @@ import {
   joinGongguDoc,
   submitReviewDoc,
 } from "../services/firebase/participationRepository";
-import type {
-  ChatMessage,
-  Gonggu,
-  GongguStatus,
-  Review,
-  User,
-} from "../types/domain";
+import { CreateScreen } from "../domains/gonggu/components/CreateScreen";
+import { HOME_FILTERS, type Deal } from "../domains/gonggu/types";
+import {
+  TEMP_STOPS,
+  barPct,
+  fmt,
+  gongguToUi,
+  gradientColor,
+  memberStr,
+  qtyStr,
+  remain,
+  statusOf,
+  tempColor,
+  tempRatio,
+  tempStr,
+  unitPrice,
+} from "../domains/gonggu/utils";
+import type { ChatMessage, User } from "../types/domain";
 import { t } from "../shared/theme/theme";
 import { styles } from "./appStyles";
-
-const TEMP_STOPS = ["#5B9BD5", "#FFC247", "#EC5578"];
 
 /* ------------------------------------------------------------------ */
 /* Types & data                                                        */
@@ -81,42 +89,6 @@ type Screen =
 
 type MainTab = "home" | "map" | "chat" | "mypage";
 
-type Deal = {
-  id: string;
-  /** 공구 소유자(방장) 유저 id */
-  hostId: string;
-  /** 공구 상태 (canceled 필터·라벨용) */
-  status: GongguStatus;
-  /** 방장이 채팅 목록에서 숨겼는지 */
-  hostHidden: boolean;
-  cat: string;
-  title: string;
-  store: string;
-  total: number;
-  /** 확보된 수량 (진행률 기준) */
-  cur: number;
-  /** 총 수량 */
-  max: number;
-  /** 참여한 사람 수 (참고용) */
-  members: number;
-  dist: string;
-  deadline: string;
-  urgent: boolean;
-  spot: string;
-  pickup: string;
-  leader: string;
-  temp: number;
-  deals: number;
-  reviews: number;
-  noshow: number;
-  tint: string;
-  method: string;
-  desc: string;
-};
-
-const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
-const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
-
 type ChatMsg = {
   type: "system" | "other" | "me";
   name?: string;
@@ -132,53 +104,12 @@ type ConfirmState = {
   onConfirm: () => void;
 };
 
-/* Gonggu → Deal 어댑터 */
-const CATEGORY_TINTS: Record<string, string> = {
-  식품: "#CFE2EC",
-  생활: "#D8E0CC",
-  패션: "#E8D5E5",
-  반려동물: "#F3DEC4",
-  "가구·인테리어": "#E4D9CE",
-  스포츠: "#CDE7E0",
-  기타: "#EEE0E5",
-};
-
 function mapPos(id: string): { left: string; top: string } {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   const left = 18 + Math.round(((h & 0xff) / 255) * 62);
   const top = 14 + Math.round((((h >> 8) & 0xff) / 255) * 64);
   return { left: `${left}%`, top: `${top}%` };
-}
-
-function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
-  const gReviews = reviews.filter((r) => r.gongguId === g.id);
-  return {
-    id: g.id,
-    hostId: g.hostUserId,
-    status: g.status,
-    hostHidden: !!g.hostHidden,
-    cat: g.category || "기타",
-    title: g.title,
-    store: g.purchaseStore,
-    total: g.totalPrice,
-    cur: g.claimedQuantity,
-    max: g.totalQuantity,
-    members: g.currentParticipants,
-    dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
-    deadline: g.recruitmentDeadline,
-    urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
-    spot: g.pickupPlaceName,
-    pickup: g.pickupExpectedTime,
-    leader: g.hostNickname,
-    temp: g.hostTrustScore,
-    deals: 0,
-    reviews: gReviews.length,
-    noshow: 0,
-    tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
-    method: g.splitMethod,
-    desc: g.description,
-  };
 }
 
 function chatMsgFromDomain(m: ChatMessage, myId: string): ChatMsg {
@@ -238,54 +169,6 @@ type NotifItem = {
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
-const fmt = (n: number) => `${Number(n).toLocaleString("ko-KR")}원`;
-/** 1개당 가격 = ceil(총가격 / 총수량) */
-const unitPrice = (d: Deal) => Math.ceil(d.total / Math.max(1, d.max));
-/** 수량 진행 표시 (확보/총) */
-const qtyStr = (d: Deal) => `${d.cur}/${d.max}개`;
-const memberStr = (d: Deal) => `참여 ${d.members}명`;
-const barPct = (d: Deal) => Math.round((d.cur / Math.max(1, d.max)) * 100);
-const remain = (d: Deal) => `앞으로 ${Math.max(0, d.max - d.cur)}개`;
-const statusOf = (d: Deal) => (d.cur >= d.max ? "모집완료" : "모집중");
-const tempStr = (n: number) => `${n.toFixed(1)}°C`;
-
-function tempColor(n: number) {
-  if (n >= 40) return t.urgentInk;
-  if (n >= 38) return t.rose;
-  if (n >= 37) return "#F0A23C";
-  return "#5B9BD5";
-}
-
-function tempRatio(n: number) {
-  return Math.max(0, Math.min(1, (n - 33) / (45 - 33)));
-}
-
-function hexToRgb(hex: string) {
-  const h = hex.replace("#", "");
-  return {
-    r: parseInt(h.slice(0, 2), 16),
-    g: parseInt(h.slice(2, 4), 16),
-    b: parseInt(h.slice(4, 6), 16),
-  };
-}
-
-function lerpColor(c1: string, c2: string, ratio: number) {
-  const a = hexToRgb(c1);
-  const b = hexToRgb(c2);
-  const r = Math.round(a.r + (b.r - a.r) * ratio);
-  const g = Math.round(a.g + (b.g - a.g) * ratio);
-  const bl = Math.round(a.b + (b.b - a.b) * ratio);
-  return `rgb(${r}, ${g}, ${bl})`;
-}
-
-function gradientColor(stops: string[], ratio: number) {
-  if (ratio <= 0) return stops[0]!;
-  if (ratio >= 1) return stops[stops.length - 1]!;
-  const scaled = ratio * (stops.length - 1);
-  const idx = Math.floor(scaled);
-  return lerpColor(stops[idx]!, stops[idx + 1]!, scaled - idx);
-}
-
 /* ------------------------------------------------------------------ */
 /* Root                                                                */
 /* ------------------------------------------------------------------ */
@@ -334,7 +217,7 @@ export function GongguMateApp() {
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
-  const data = useFirestoreData();
+  const data = useFirestoreData(auth.user?.uid ?? null);
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
@@ -652,26 +535,34 @@ export function GongguMateApp() {
   }
 
   async function handleCreate() {
-    if (isFirebaseConfigured()) {
-      try {
-        await createGongguDoc(
-          {
-            title: cTitle.trim() || `${createCat} 공구`,
-            category: createCat,
-            totalPrice: Number(cTotal) || 0,
-            totalQuantity: Number(cQty) || 1,
-            pickupPlaceName: cPickup || "장소 미정",
-            pickupExpectedTime: cTime || "시간 미정",
-            splitMethod: "수량 기준 비례 분담",
-            recruitmentDeadline: "미정",
-          },
-          currentUser,
-        );
-      } catch {
-        showToast("공구 생성에 실패했어요. 다시 시도해주세요.");
-        return;
-      }
+    const input = {
+      title: cTitle.trim() || `${createCat} 공구`,
+      category: createCat,
+      totalPrice: Number(cTotal) || 0,
+      totalQuantity: Number(cQty) || 1,
+      pickupPlaceName: cPickup || "장소 미정",
+      pickupExpectedTime: cTime || "시간 미정",
+      splitMethod: "수량 기준 비례 분담",
+      recruitmentDeadline: "미정",
+    };
+
+    if (!isFirebaseConfigured()) {
+      showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
+      return;
     }
+
+    try {
+      await createGongguDoc(input, currentUser);
+    } catch {
+      showToast("공구 생성에 실패했어요. 다시 시도해주세요.");
+      return;
+    }
+
+    setCTitle("");
+    setCTotal("");
+    setCQty("10");
+    setCPickup("");
+    setCTime("");
     go("home", "home");
     showToast("공구가 게시됐어요! 🎉");
   }
@@ -722,6 +613,16 @@ export function GongguMateApp() {
                 onVerify={() => {
                   setVerifyStep(0);
                   setScreen("verify");
+                }}
+                onFirebaseRequired={() => {
+                  showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
+                }}
+                onPeek={() => {
+                  if (!isFirebaseConfigured() || auth.user) {
+                    go("home", "home");
+                    return;
+                  }
+                  void auth.signIn().finally(() => go("home", "home"));
                 }}
                 onGoogleLogin={() => {
                   skipSocialAutoVerifyRef.current = false;
@@ -1491,57 +1392,6 @@ function SendArrowIcon({
   );
 }
 
-function CameraIcon({
-  size = 22,
-  color = t.dim,
-}: {
-  size?: number;
-  color?: string;
-}) {
-  const s = size;
-  return (
-    <View style={{ width: s, height: s * 0.82 }}>
-      {/* 카메라 몸체 */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: s * 0.62,
-          backgroundColor: color,
-          borderRadius: s * 0.12,
-        }}
-      />
-      {/* 렌즈 */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: s * 0.13,
-          left: "50%",
-          marginLeft: -s * 0.175,
-          width: s * 0.35,
-          height: s * 0.35,
-          borderRadius: s * 0.175,
-          backgroundColor: "rgba(255,255,255,0.85)",
-        }}
-      />
-      {/* 상단 뷰파인더 범프 */}
-      <View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: "26%",
-          width: s * 0.3,
-          height: s * 0.2,
-          backgroundColor: color,
-          borderRadius: s * 0.06,
-        }}
-      />
-    </View>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Login                                                               */
 /* ------------------------------------------------------------------ */
@@ -1549,11 +1399,13 @@ function CameraIcon({
 function LoginScreen({
   auth,
   onVerify,
+  onFirebaseRequired,
   onGoogleLogin,
   onPeek,
 }: {
   auth: UseFirebaseAuth;
   onVerify: () => void;
+  onFirebaseRequired: () => void;
   onGoogleLogin: () => void;
   onPeek: () => void;
 }) {
@@ -1568,6 +1420,11 @@ function LoginScreen({
   }
 
   function handleGoogle() {
+    if (auth.status === "disabled") {
+      onFirebaseRequired();
+      return;
+    }
+
     onGoogleLogin();
     void auth.signInGoogle();
     /* 로그인 성공 시 useEffect에서 verify 화면으로 이동 */
@@ -1886,7 +1743,6 @@ function HomeScreen({
       (q === "" || d.title.toLowerCase().includes(q))
   );
   const headerLocation = isLocationVerified ? `📍 ${locationLabel}` : locationLabel;
-
 
   return (
     <View style={styles.flex}>
@@ -2624,200 +2480,6 @@ function ChatScreen({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Create                                                              */
-/* ------------------------------------------------------------------ */
-
-function CreateScreen({
-  cat,
-  onCat,
-  title,
-  onTitle,
-  total,
-  qty,
-  pickup,
-  time,
-  onTotal,
-  onQty,
-  onPickup,
-  onTime,
-  onBack,
-  onPost,
-}: {
-  cat: string;
-  onCat: (c: string) => void;
-  title: string;
-  onTitle: (v: string) => void;
-  total: string;
-  qty: string;
-  pickup: string;
-  time: string;
-  onTotal: (v: string) => void;
-  onQty: (v: string) => void;
-  onPickup: (v: string) => void;
-  onTime: (v: string) => void;
-  onBack: () => void;
-  onPost: () => void | Promise<void>;
-}) {
-  const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
-
-  return (
-    <View style={styles.flex}>
-      <View style={styles.simpleHeader}>
-        <Pressable onPress={onBack} style={{ padding: 4 }}>
-          <Text style={styles.backArrow}>‹</Text>
-        </Pressable>
-        <Text style={styles.simpleHeaderTitle}>공구 만들기</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.createBody}>
-        <View>
-          <Text style={styles.fieldLabel}>상품 사진</Text>
-          <View style={{ flexDirection: "row", gap: 9, marginTop: 9 }}>
-            <Pressable style={styles.photoAdd}>
-              <CameraIcon size={22} color={t.dim} />
-              <Text style={{ fontSize: 11, fontWeight: "600", color: t.dim }}>
-                0/5
-              </Text>
-            </Pressable>
-            <View style={[styles.photoThumb, { backgroundColor: "#EDDEE3" }]} />
-          </View>
-        </View>
-
-        <View>
-          <Text style={styles.fieldLabel}>제목</Text>
-          <TextInput
-            value={title}
-            onChangeText={onTitle}
-            placeholder="예) 코스트코 크루아상 나눠사요"
-            placeholderTextColor={t.dim}
-            style={styles.createInput}
-          />
-        </View>
-
-        <View>
-          <Text style={styles.fieldLabel}>카테고리</Text>
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              marginTop: 9,
-              flexWrap: "wrap",
-            }}
-          >
-            {CREATE_CATS.map((label) => {
-              const active = label === cat;
-              return (
-                <Pressable
-                  key={label}
-                  onPress={() => onCat(label)}
-                  style={[
-                    styles.catChip,
-                    {
-                      backgroundColor: active ? t.roseSoft : "#fff",
-                      borderColor: active ? t.rose : t.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "600",
-                      color: active ? t.rose : t.chipInk,
-                    }}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={{ flexDirection: "row", gap: 11 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>총 가격</Text>
-            <View style={styles.suffixField}>
-              <TextInput
-                value={total}
-                onChangeText={onTotal}
-                keyboardType="number-pad"
-                style={styles.suffixInput}
-              />
-              <Text style={styles.suffix}>원</Text>
-            </View>
-          </View>
-          <View style={{ width: 108 }}>
-            <Text style={styles.fieldLabel}>총 수량</Text>
-            <View style={styles.suffixField}>
-              <TextInput
-                value={qty}
-                onChangeText={onQty}
-                keyboardType="number-pad"
-                style={styles.suffixInput}
-              />
-              <Text style={styles.suffix}>개</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.perPersonBox}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: t.roseInk }}>
-            1개당 가격
-          </Text>
-          <Text style={{ fontSize: 20, fontWeight: "800", color: t.rose }}>
-            {perUnit}
-          </Text>
-        </View>
-
-        <View style={{ flexDirection: "row", gap: 11 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>픽업 장소</Text>
-            <TextInput
-              value={pickup}
-              onChangeText={onPickup}
-              placeholder="정문 CU 앞"
-              placeholderTextColor={t.dim}
-              style={styles.createInput}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>픽업 시간</Text>
-            <TextInput
-              value={time}
-              onChangeText={onTime}
-              placeholder="오늘 저녁 7시"
-              placeholderTextColor={t.dim}
-              style={styles.createInput}
-            />
-          </View>
-        </View>
-
-        <View>
-          <Text style={styles.fieldLabel}>소분 방법</Text>
-          <TextInput
-            placeholder="예) 1인 4개씩 나눠가져요"
-            placeholderTextColor={t.dim}
-            style={styles.createInput}
-          />
-        </View>
-      </ScrollView>
-
-      <View style={styles.stickyFooter}>
-        <Pressable
-          style={[styles.footerButton, { backgroundColor: t.pink }]}
-          onPress={onPost}
-        >
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-            공구 게시하기
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Review                                                              */
 /* ------------------------------------------------------------------ */
 
