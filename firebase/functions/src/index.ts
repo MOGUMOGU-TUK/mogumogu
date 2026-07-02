@@ -13,6 +13,7 @@ const db = admin.firestore();
 
 type JoinGongguInput = {
   gongguId: string;
+  quantity?: number;
 };
 
 type NotifSettings = {
@@ -33,6 +34,15 @@ function assertSignedIn(uid?: string) {
     throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
   }
   return uid;
+}
+
+/** 참여 문서 id (top-level participations, 앱과 동일 규칙). */
+const participationId = (gongguId: string, userId: string) => `${gongguId}__${userId}`;
+
+/** 특정 공구의 참여자 userId 목록 (top-level participations 기준). */
+async function participantUserIds(gongguId: string): Promise<string[]> {
+  const snap = await db.collection("participations").where("gongguId", "==", gongguId).get();
+  return snap.docs.map((d) => String(d.data().userId));
 }
 
 /**
@@ -73,23 +83,30 @@ async function sendNotifToUsers(
 
 /* ------------------------------------------------------------------ */
 /* Callable Functions                                                  */
+/*                                                                     */
+/* NOTE (MVP): 아래 3개 콜러블(joinGonggu/confirmPickup/submitReview)은 */
+/* Phase 2용 "authoritative mutation"이다. 현재 MVP 클라이언트는 이들을  */
+/* 호출하지 않고 participationRepository에서 직접 쓴다. 여기서는 앱과    */
+/* 동일한 top-level `participations` + 수량 모델(totalQuantity/          */
+/* claimedQuantity/quantity/amount)을 쓰도록만 맞춰 둔다.                */
 /* ------------------------------------------------------------------ */
 
 export const joinGonggu = onCall<JoinGongguInput>(async (request) => {
   const uid = assertSignedIn(request.auth?.uid);
   const { gongguId } = request.data;
+  const quantity = Math.max(1, Math.floor(Number(request.data.quantity ?? 1)));
 
   if (!gongguId) {
     throw new HttpsError("invalid-argument", "gongguId가 필요합니다.");
   }
 
   const gongguRef = db.collection("gonggus").doc(gongguId);
-  const participantRef = gongguRef.collection("participants").doc(uid);
+  const participationRef = db.collection("participations").doc(participationId(gongguId, uid));
 
   let hostUserId = "";
   let gongguTitle = "";
-  let nextCount = 0;
-  let targetParticipants = 0;
+  let nextClaimed = 0;
+  let totalQuantity = 0;
 
   await db.runTransaction(async (transaction) => {
     const gongguDoc = await transaction.get(gongguRef);
@@ -99,29 +116,37 @@ export const joinGonggu = onCall<JoinGongguInput>(async (request) => {
     }
 
     const gonggu = gongguDoc.data() ?? {};
+    const claimedQuantity = Number(gonggu.claimedQuantity ?? 0);
+    totalQuantity = Number(gonggu.totalQuantity ?? 0);
+    const totalPrice = Number(gonggu.totalPrice ?? 0);
     const currentParticipants = Number(gonggu.currentParticipants ?? 0);
-    targetParticipants = Number(gonggu.targetParticipants ?? 0);
     hostUserId = String(gonggu.hostUserId ?? "");
     gongguTitle = String(gonggu.title ?? "공구");
 
-    if (currentParticipants >= targetParticipants) {
-      throw new HttpsError("failed-precondition", "모집 인원이 이미 가득 찼습니다.");
+    const remaining = totalQuantity - claimedQuantity;
+    if (remaining <= 0 || quantity > remaining) {
+      throw new HttpsError("failed-precondition", "남은 수량을 초과했습니다.");
     }
 
-    transaction.set(participantRef, {
+    const unitPrice = Math.ceil(totalPrice / Math.max(1, totalQuantity));
+    nextClaimed = claimedQuantity + quantity;
+
+    transaction.set(participationRef, {
       gongguId,
       userId: uid,
       status: "payment_confirmed",
       paymentStatus: "confirmed",
       pickupConfirmationStatus: "pending",
       reviewStatus: "required",
+      quantity,
+      amount: unitPrice * quantity,
       joinedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    nextCount = currentParticipants + 1;
     transaction.update(gongguRef, {
-      currentParticipants: nextCount,
-      status: nextCount >= targetParticipants ? "recruited" : "recruiting",
+      claimedQuantity: nextClaimed,
+      currentParticipants: currentParticipants + 1,
+      status: nextClaimed >= totalQuantity ? "recruited" : "recruiting",
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
   });
@@ -142,16 +167,15 @@ export const joinGonggu = onCall<JoinGongguInput>(async (request) => {
     );
   }
 
-  // 모집 인원 달성 → 모든 참여자에게
-  if (nextCount >= targetParticipants) {
-    const participantsSnap = await gongguRef.collection("participants").get();
-    const allParticipantIds = participantsSnap.docs.map((d) => d.id);
+  // 필요 수량 모두 확보 → 모든 참여자에게
+  if (nextClaimed >= totalQuantity) {
+    const allParticipantIds = await participantUserIds(gongguId);
     notifPromises.push(
       sendNotifToUsers(
         allParticipantIds,
         "full",
-        "모집 인원 달성! 🎉",
-        `[${gongguTitle}] 목표 인원이 모두 모였어요`,
+        "모집 완료! 🎉",
+        `[${gongguTitle}] 필요한 수량이 모두 모였어요`,
         { gongguId, type: "full" }
       )
     );
@@ -171,10 +195,10 @@ export const confirmPickup = onCall<JoinGongguInput>(async (request) => {
   }
 
   const gongguRef = db.collection("gonggus").doc(gongguId);
-  const participantRef = gongguRef.collection("participants").doc(uid);
+  const participationRef = db.collection("participations").doc(participationId(gongguId, uid));
 
   await db.runTransaction(async (transaction) => {
-    transaction.update(participantRef, {
+    transaction.update(participationRef, {
       status: "pickup_confirmed",
       pickupConfirmationStatus: "confirmed",
       pickupCompletedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -203,7 +227,7 @@ export const submitReview = onCall<{
   }
 
   const gongguRef = db.collection("gonggus").doc(gongguId);
-  const participantRef = gongguRef.collection("participants").doc(uid);
+  const participationRef = db.collection("participations").doc(participationId(gongguId, uid));
   const reviewRef = db.collection("reviews").doc();
 
   await db.runTransaction(async (transaction) => {
@@ -221,7 +245,7 @@ export const submitReview = onCall<{
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    transaction.update(participantRef, {
+    transaction.update(participationRef, {
       status: "reviewed",
       reviewStatus: "completed"
     });
@@ -259,13 +283,13 @@ export const onNewChatMessage = onDocumentCreated(
     const { gongguId } = event.params;
     const senderId = msg.senderId as string;
 
-    const [gongguDoc, participantsSnap] = await Promise.all([
+    const [gongguDoc, allParticipantIds] = await Promise.all([
       db.collection("gonggus").doc(gongguId).get(),
-      db.collection("gonggus").doc(gongguId).collection("participants").get()
+      participantUserIds(gongguId)
     ]);
 
     const gongguTitle = (gongguDoc.data()?.title as string) ?? "공구";
-    const participantIds = participantsSnap.docs.map((d) => d.id).filter((id) => id !== senderId);
+    const participantIds = allParticipantIds.filter((id) => id !== senderId);
 
     const previewText = (msg.text as string).slice(0, 30);
 
@@ -303,13 +327,7 @@ export const onDeadlineApproaching = onSchedule(
     await Promise.all(
       gonggusSnap.docs.map(async (gongguDoc) => {
         const gonggu = gongguDoc.data();
-        const participantsSnap = await db
-          .collection("gonggus")
-          .doc(gongguDoc.id)
-          .collection("participants")
-          .get();
-
-        const participantIds = participantsSnap.docs.map((d) => d.id);
+        const participantIds = await participantUserIds(gongguDoc.id);
 
         await sendNotifToUsers(
           participantIds,
