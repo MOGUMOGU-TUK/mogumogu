@@ -1871,10 +1871,7 @@ function HomeScreen({
       (filter === "전체" || d.cat === filter) &&
       (q === "" || d.title.toLowerCase().includes(q))
   );
-
-  const visible = deals.filter((d) => filter === "전체" || d.cat === filter);
   const headerLocation = isLocationVerified ? `📍 ${locationLabel}` : locationLabel;
-
 
   return (
     <View style={styles.flex}>
