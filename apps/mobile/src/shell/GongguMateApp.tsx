@@ -55,16 +55,14 @@ import { TemperatureGradientBar as GradientBar } from "../domains/gonggu/compone
 import { VerifyScreen } from "../domains/location/components/VerifyScreen";
 import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";
+import { MapScreen } from "../domains/map/components/MapScreen";
 import type { ChatMsg } from "../domains/chat/types";
 import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
 import {
-  fmt,
   gongguToUi,
   isDealNearLocation,
-  qtyStr,
   tempRatio,
-  unitPrice,
 } from "../domains/gonggu/utils";
 import type { User } from "../types/domain";
 import { EmptyState } from "../shared/ui/EmptyState";
@@ -89,14 +87,6 @@ type ConfirmState = {
   danger?: boolean;
   onConfirm: () => void;
 };
-
-function mapPos(id: string): { left: string; top: string } {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  const left = 18 + Math.round(((h & 0xff) / 255) * 62);
-  const top = 14 + Math.round((((h >> 8) & 0xff) / 255) * 64);
-  return { left: `${left}%`, top: `${top}%` };
-}
 
 const REVIEW_QUESTIONS: Array<{ key: ReviewKey; label: string }> = [
   { key: "time", label: "시간 약속을 잘 지켰나요?" },
@@ -843,134 +833,6 @@ export function GongguMateApp() {
 /* ------------------------------------------------------------------ */
 /* Verify (nickname → locate → done)                                   */
 /* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/* Home                                                                */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/* Map                                                                 */
-/* ------------------------------------------------------------------ */
-
-function MapScreen({
-  deals,
-  locationLabel,
-  mapSel,
-  pick,
-  onPickMarker,
-  onList,
-  onOpen,
-}: {
-  deals: Deal[];
-  locationLabel: string;
-  mapSel: string;
-  pick: Deal | null;
-  onPickMarker: (id: string) => void;
-  onList: () => void;
-  onOpen: () => void;
-}) {
-  return (
-    <View style={styles.mapWrap}>
-      {/* faux roads / blocks */}
-      <View
-        style={[
-          styles.mapRoad,
-          { top: "18%", transform: [{ rotate: "-14deg" }] },
-        ]}
-      />
-      <View
-        style={[
-          styles.mapRoad,
-          { top: "62%", height: 38, transform: [{ rotate: "8deg" }] },
-        ]}
-      />
-      <View style={styles.mapBlockA} />
-      <View style={styles.mapBlockB} />
-
-      {/* you marker */}
-      <View style={styles.youOuter}>
-        <View style={styles.youDot} />
-      </View>
-
-      {deals.map((d) => {
-        const on = d.id === mapSel;
-        const pos = mapPos(d.id);
-        return (
-          <Pressable
-            key={d.id}
-            onPress={() => onPickMarker(d.id)}
-            style={[
-              styles.mapMarker,
-              {
-                left: pos.left as any,
-                top: pos.top as any,
-                backgroundColor: on ? t.pink : "#fff",
-              },
-            ]}
-          >
-            <Text
-              style={{
-                fontSize: 13,
-                fontWeight: "800",
-                color: on ? "#fff" : t.ink,
-              }}
-            >
-              {fmt(unitPrice(d))}
-            </Text>
-          </Pressable>
-        );
-      })}
-
-      {/* top bar */}
-      <View style={styles.mapTopBar}>
-        <View style={styles.mapPill}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>{locationLabel} · 반경 1km</Text>
-        </View>
-        <Pressable style={styles.mapPill} onPress={onList}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>
-            ☰ 리스트
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* bottom sheet */}
-      {pick && (
-        <View style={styles.mapSheet}>
-          <Pressable style={{ flexDirection: "row", gap: 12 }} onPress={onOpen}>
-            <View
-              style={[styles.mapSheetThumb, { backgroundColor: pick.tint }]}
-            />
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: "700",
-                  color: pick.urgent ? t.urgentInk : t.chipInk,
-                }}
-              >
-                {pick.deadline}
-              </Text>
-              <Text style={styles.mapSheetTitle} numberOfLines={1}>
-                {pick.title}
-              </Text>
-              <Text style={styles.dealStore}>
-                {pick.spot} · {qtyStr(pick)}
-              </Text>
-              <Text style={[styles.dealPrice, { marginTop: 3 }]}>
-                1개당 {fmt(unitPrice(pick))}
-              </Text>
-            </View>
-          </Pressable>
-          <Pressable style={styles.mapSheetButton} onPress={onOpen}>
-            <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
-              자세히 보기
-            </Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /* Review                                                              */
