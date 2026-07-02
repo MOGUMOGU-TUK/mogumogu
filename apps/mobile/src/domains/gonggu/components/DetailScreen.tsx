@@ -14,8 +14,8 @@ import {
   tempStr,
   unitPrice,
 } from "../utils";
-import { ProgressBar } from "./ProgressBar";
-import { TemperatureGradientBar } from "./TemperatureGradientBar";
+import { ProgressBar } from "../../../shared/ui/ProgressBar";
+import { TemperatureGradientBar } from "../../../shared/ui/TemperatureGradientBar";
 
 type DetailScreenProps = {
   deal: Deal;

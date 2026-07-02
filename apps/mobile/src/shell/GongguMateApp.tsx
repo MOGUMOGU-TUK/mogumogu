@@ -50,7 +50,7 @@ import { CreateScreen } from "../domains/gonggu/components/CreateScreen";
 import { DetailScreen as GongguDetailScreen } from "../domains/gonggu/components/DetailScreen";
 import { HomeScreen as GongguHomeScreen } from "../domains/gonggu/components/HomeScreen";
 import { JoinSheet as GongguJoinSheet } from "../domains/gonggu/components/JoinSheet";
-import { TemperatureGradientBar as GradientBar } from "../domains/gonggu/components/TemperatureGradientBar";
+import { TemperatureGradientBar as GradientBar } from "../shared/ui/TemperatureGradientBar";
 import { VerifyScreen } from "../domains/location/components/VerifyScreen";
 import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";

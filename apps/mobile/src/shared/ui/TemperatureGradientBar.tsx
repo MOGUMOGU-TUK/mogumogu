@@ -1,7 +1,7 @@
 import { View } from "react-native";
 
-import { styles } from "../../../shell/appStyles";
-import { TEMP_STOPS, gradientColor } from "../utils";
+import { styles } from "../../shell/appStyles";
+import { TEMP_STOPS, gradientColor } from "../utils/color";
 
 export function TemperatureGradientBar({
   ratio,

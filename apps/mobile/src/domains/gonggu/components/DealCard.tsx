@@ -4,7 +4,7 @@ import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shell/appStyles";
 import type { Deal } from "../types";
 import { barPct, fmt, qtyStr, remain, unitPrice } from "../utils";
-import { ProgressBar } from "./ProgressBar";
+import { ProgressBar } from "../../../shared/ui/ProgressBar";
 
 export function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void }) {
   return (
