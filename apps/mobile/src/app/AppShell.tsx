@@ -59,7 +59,8 @@ import type { ReviewKey } from "../domains/review/types";
 import type { ChatMsg } from "../domains/chat/types";
 import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
-import { gongguToUi, isDealNearLocation } from "../domains/gonggu/utils";
+import { gongguToUi } from "../domains/gonggu/utils";
+import { isWithinRadiusKm } from "../domains/location/services/geo";
 import type { User } from "../types/domain";
 import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
 import { EmptyState } from "../shared/ui/EmptyState";
@@ -126,21 +127,25 @@ export function AppShell() {
   );
 
   const feedDeals = useMemo(
-    () =>
-      deals.filter(
-        (d) => d.status !== "canceled" && isDealNearLocation(d, verifiedLocation)
-      ),
-    [deals, verifiedLocation],
+    () => deals.filter((d) => d.status !== "canceled"),
+    [deals],
   );
 
-  /* 지도: 좌표가 있는 피드 공구만 (카카오 마커용) */
-  const mapDeals = useMemo(
-    () =>
-      feedDeals.filter(
-        (d) => d.pickupLatitude != null && d.pickupLongitude != null
+  /* 지도: 좌표 있고 인증 위치 반경 1km 이내 공구만 (카카오 마커용) */
+  const mapDeals = useMemo(() => {
+    const withCoords = feedDeals.filter(
+      (d) => d.pickupLatitude != null && d.pickupLongitude != null,
+    );
+    if (!verifiedLocation) return withCoords;
+    return withCoords.filter((d) =>
+      isWithinRadiusKm(
+        verifiedLocation.latitude,
+        verifiedLocation.longitude,
+        d.pickupLatitude!,
+        d.pickupLongitude!,
       ),
-    [feedDeals],
-  );
+    );
+  }, [feedDeals, verifiedLocation]);
 
   /* 피드 기준 selectedId / mapSel 보정 */
   useEffect(() => {
@@ -542,19 +547,8 @@ export function AppShell() {
             {screen === "login" && (
               <LoginScreen
                 auth={auth}
-                onVerify={() => {
-                  setVerifyStep(0);
-                  setScreen("verify");
-                }}
                 onFirebaseRequired={() => {
                   showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
-                }}
-                onPeek={() => {
-                  if (!isFirebaseConfigured() || auth.user) {
-                    go("home", "home");
-                    return;
-                  }
-                  void auth.signIn().finally(() => go("home", "home"));
                 }}
                 onGoogleLogin={() => {
                   skipSocialAutoVerifyRef.current = false;

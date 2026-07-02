@@ -2,31 +2,21 @@ import { Pressable, Text, useWindowDimensions, View } from "react-native";
 
 import type { UseFirebaseAuth } from "../hooks/useFirebaseAuth";
 import { t } from "../../../shared/theme/theme";
-import { BasketIcon, GoogleGIcon, KakaoIcon } from "../../../shared/ui/icons";
+import { BasketIcon, GoogleGIcon } from "../../../shared/ui/icons";
 import { styles } from "../../../shared/ui/appStyles";
 
 export function LoginScreen({
   auth,
-  onVerify,
   onFirebaseRequired,
   onGoogleLogin,
-  onPeek,
 }: {
   auth: UseFirebaseAuth;
-  onVerify: () => void;
   onFirebaseRequired: () => void;
   onGoogleLogin: () => void;
-  onPeek: () => void;
 }) {
   const { height } = useWindowDimensions();
   const isSmall = height < 700;
   const loading = auth.status === "loading";
-
-  function handleKakao() {
-    /* Kakao OAuth 미구현 — 익명 세션 후 닉네임 설정으로 진입 */
-    void auth.signIn();
-    onVerify();
-  }
 
   function handleGoogle() {
     if (auth.status === "disabled") {
@@ -69,20 +59,6 @@ export function LoginScreen({
       )}
 
       <View style={{ gap: 11, paddingBottom: isSmall ? 20 : 26 }}>
-        {/* 카카오 공식 버튼 */}
-        <Pressable
-          style={[
-            styles.authButton,
-            { backgroundColor: t.kakao, opacity: loading ? 0.6 : 1 },
-          ]}
-          onPress={handleKakao}
-          disabled={loading}
-        >
-          <KakaoIcon size={22} />
-          <Text style={[styles.authButtonText, { color: t.kakaoInk }]}>
-            카카오로 시작하기
-          </Text>
-        </Pressable>
         {/* Google 공식 버튼 */}
         <Pressable
           style={[
@@ -101,12 +77,6 @@ export function LoginScreen({
           <Text style={[styles.authButtonText, { color: "#3C4043" }]}>
             {loading ? "로그인 중…" : "Google로 시작하기"}
           </Text>
-        </Pressable>
-        <Pressable
-          onPress={onPeek}
-          style={{ paddingVertical: 6, alignItems: "center" }}
-        >
-          <Text style={{ color: t.dim, fontSize: 13 }}>먼저 둘러볼게요</Text>
         </Pressable>
       </View>
     </View>
