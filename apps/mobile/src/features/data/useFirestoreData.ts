@@ -27,10 +27,11 @@ export type FirestoreData = {
  * - 미설정 시: seed 데이터로 동작 (source `"seed"`)
  * - gonggus 가 비어 있으면 데모용으로 seed 공구를 보여준다.
  */
-export function useFirestoreData(): FirestoreData {
+export function useFirestoreData(authUid?: string | null): FirestoreData {
   const configured = isFirebaseConfigured();
+  const canSubscribe = configured && Boolean(authUid);
   const [gonggus, setGonggus] = useState<Gonggu[]>(seedSnapshot.gonggus);
-  const [source, setSource] = useState<GongguSource>(configured ? "loading" : "seed");
+  const [source, setSource] = useState<GongguSource>(canSubscribe ? "loading" : "seed");
   const [participations, setParticipations] = useState<Participation[]>(seedSnapshot.participations);
   const [settlements, setSettlements] = useState<Settlement[]>(seedSnapshot.settlements);
   const [reviews, setReviews] = useState<Review[]>(seedSnapshot.reviews);
@@ -39,7 +40,16 @@ export function useFirestoreData(): FirestoreData {
     if (!configured) {
       return;
     }
+    if (!authUid) {
+      setGonggus([]);
+      setParticipations([]);
+      setSettlements([]);
+      setReviews([]);
+      setSource("loading");
+      return;
+    }
 
+    setSource("loading");
     const unsubscribers = [
       subscribeGonggus(
         (items) => {
@@ -54,7 +64,27 @@ export function useFirestoreData(): FirestoreData {
     ];
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [configured]);
+  }, [configured, authUid]);
+
+  if (!configured) {
+    return {
+      gonggus: seedSnapshot.gonggus,
+      participations: seedSnapshot.participations,
+      settlements: seedSnapshot.settlements,
+      reviews: seedSnapshot.reviews,
+      source: "seed",
+    };
+  }
+
+  if (!authUid) {
+    return {
+      gonggus: [],
+      participations: [],
+      settlements: [],
+      reviews: [],
+      source: "loading",
+    };
+  }
 
   return { gonggus, participations, settlements, reviews, source };
 }
