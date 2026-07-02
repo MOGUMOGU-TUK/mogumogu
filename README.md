@@ -110,7 +110,7 @@
 | 픽업 / 후기 / 정산 | ✅ 실연동 | 상태 전환·1/N 계산 |
 | 공구 채팅 | ✅ 실연동 | Firestore 실시간 메시지 |
 | 주변 공구 지도 | 🔜 진행 중 | 카카오맵 연동 |
-| 위치 인증 (실제) | 🔜 예정 | 현재 데모 단계 |
+| 위치 인증 (실제) | ✅ 실연동 | GPS + 카카오 로컬 API (REST 키 필요) |
 | 카카오/네이티브 로그인·푸시 | 🔜 예정 | EAS 빌드 단계 |
 
 ## 9. 로드맵
@@ -150,16 +150,23 @@ mogumogu/
 └── package.json     # 루트 스크립트
 ```
 
-### 실행
+### 실행 (루트에서)
+실제 앱은 `apps/mobile`에 있고, 루트 스크립트가 `--prefix apps/mobile`로 감쌉니다.
 ```bash
-bun install                 # 또는 npm install
+npm install                 # 루트 + apps/mobile
 npm run web                 # 웹 프리뷰 (가장 빠름)
 npm run ios                 # iOS 시뮬레이터
+npm run typecheck           # tsc --noEmit
+npm test                    # jest 단위 테스트
 ```
 
 ### 환경 변수
-`.env`는 커밋하지 않습니다. `apps/mobile/.env.example`을 복사해 Firebase config를 채우세요.
-자세한 순서: [firebase/setup.md](./firebase/setup.md) · 프론트 개편 가이드: [docs/design/frontend-handoff.md](./docs/design/frontend-handoff.md)
+`.env`는 커밋하지 않습니다. `apps/mobile/.env.example`을 `apps/mobile/.env`로 복사해 채우세요.
+- **Firebase config**(`EXPO_PUBLIC_FIREBASE_*`) — 없으면 시드(mock) 모드로 폴백, 있으면 실연동.
+- **`EXPO_PUBLIC_KAKAO_REST_API_KEY`** — 동네 인증(좌표→동네 이름)에 **필수**. JavaScript/Native 키와 별개인 **REST API 키**.
+
+`EXPO_PUBLIC_*`는 번들 타임 주입이라 `.env` 변경 후 `npx expo start -c`로 재시작하세요.
+자세한 순서: [firebase/setup.md](./firebase/setup.md) · 로컬 실행: [docs/local-setup.md](./docs/local-setup.md) · 프론트 개편 가이드: [docs/design/frontend-handoff.md](./docs/design/frontend-handoff.md)
 
 ### 협업 규칙
 - `main`에는 PR로 머지합니다.

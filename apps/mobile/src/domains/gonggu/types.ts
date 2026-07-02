@@ -19,6 +19,9 @@ export type Deal = {
   /** 참여한 사람 수 (참고용) */
   members: number;
   dist: string;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  pickupNeighborhood?: string;
   deadline: string;
   urgent: boolean;
   spot: string;
@@ -31,8 +34,6 @@ export type Deal = {
   tint: string;
   method: string;
   desc: string;
-  pickupLat?: number;
-  pickupLng?: number;
 };
 
 export const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];

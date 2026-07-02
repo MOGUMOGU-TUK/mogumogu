@@ -30,10 +30,8 @@ service cloud.firestore {
       allow update: if signedIn();
       allow delete: if false;
 
-      match /participants/{userId} {
-        allow read: if signedIn();
-        allow write: if false;
-      }
+      // 참여 내역은 top-level `participations` 컬렉션으로 통일됨(하단 참고).
+      // 예전 gonggus/{id}/participants 서브컬렉션은 미사용이라 제거함.
 
       match /images/{imageId} {
         allow read: if signedIn();

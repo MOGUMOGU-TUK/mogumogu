@@ -61,6 +61,8 @@ export type Gonggu = {
   pickupLatitude?: number;
   /** 픽업 장소 경도 */
   pickupLongitude?: number;
+  /** 픽업 동네 이름 (역지오코딩 결과). */
+  pickupNeighborhood?: string;
   pickupDistanceMeters: number;
   pickupExpectedTime: string;
   recruitmentDeadline: string;

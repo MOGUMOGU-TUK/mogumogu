@@ -1,10 +1,10 @@
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { GongguMateApp } from "./src/shell/GongguMateApp";
+import { AppShell } from "./src/app/AppShell";
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <GongguMateApp />
+      <AppShell />
     </SafeAreaProvider>
   );
 }
