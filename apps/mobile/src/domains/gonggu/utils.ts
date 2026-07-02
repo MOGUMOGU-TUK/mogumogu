@@ -41,6 +41,8 @@ export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
     tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
     method: g.splitMethod,
     desc: g.description,
+    pickupLat: g.pickupLatitude,
+    pickupLng: g.pickupLongitude,
   };
 }
 
