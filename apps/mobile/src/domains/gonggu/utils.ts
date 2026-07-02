@@ -29,6 +29,9 @@ export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
     max: g.totalQuantity,
     members: g.currentParticipants,
     dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
+    pickupLatitude: g.pickupLatitude,
+    pickupLongitude: g.pickupLongitude,
+    pickupNeighborhood: g.pickupNeighborhood,
     deadline: g.recruitmentDeadline,
     urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
     spot: g.pickupPlaceName,
@@ -57,6 +60,44 @@ export const barPct = (d: Deal) => Math.round((d.cur / Math.max(1, d.max)) * 100
 export const remain = (d: Deal) => `앞으로 ${Math.max(0, d.max - d.cur)}개`;
 export const statusOf = (d: Deal) => (d.cur >= d.max ? "모집완료" : "모집중");
 export const tempStr = (n: number) => `${n.toFixed(1)}°C`;
+
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+const DEFAULT_FEED_RADIUS_METERS = 1000;
+
+export function distanceMeters(a: Coordinates, b: Coordinates) {
+  const earthRadiusMeters = 6371_000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+export function isDealNearLocation(
+  deal: Deal,
+  location: Coordinates | null | undefined,
+  radiusMeters = DEFAULT_FEED_RADIUS_METERS
+) {
+  if (!location) return true;
+  if (typeof deal.pickupLatitude !== "number" || typeof deal.pickupLongitude !== "number") {
+    return true;
+  }
+
+  return (
+    distanceMeters(location, {
+      latitude: deal.pickupLatitude,
+      longitude: deal.pickupLongitude
+    }) <= radiusMeters
+  );
+}
 
 export function tempColor(n: number) {
   if (n >= 40) return t.urgentInk;

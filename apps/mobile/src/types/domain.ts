@@ -58,6 +58,9 @@ export type Gonggu = {
   splitMethod: string;
   pickupPlaceName: string;
   pickupDistanceMeters: number;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  pickupNeighborhood?: string;
   pickupExpectedTime: string;
   recruitmentDeadline: string;
   status: GongguStatus;

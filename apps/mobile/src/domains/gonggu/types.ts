@@ -19,6 +19,9 @@ export type Deal = {
   /** 참여한 사람 수 (참고용) */
   members: number;
   dist: string;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  pickupNeighborhood?: string;
   deadline: string;
   urgent: boolean;
   spot: string;

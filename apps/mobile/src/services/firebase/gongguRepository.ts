@@ -51,6 +51,9 @@ export type CreateGongguInput = {
   totalPrice: number;
   totalQuantity: number;
   pickupPlaceName: string;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  pickupNeighborhood?: string;
   pickupExpectedTime: string;
   splitMethod: string;
   recruitmentDeadline: string;
@@ -91,6 +94,13 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     splitMethod: input.splitMethod,
     pickupPlaceName: input.pickupPlaceName,
     pickupDistanceMeters: 300,
+    ...(typeof input.pickupLatitude === "number" && typeof input.pickupLongitude === "number"
+      ? {
+          pickupLatitude: input.pickupLatitude,
+          pickupLongitude: input.pickupLongitude,
+          pickupNeighborhood: input.pickupNeighborhood ?? host.neighborhood
+        }
+      : {}),
     pickupExpectedTime: input.pickupExpectedTime,
     recruitmentDeadline: input.recruitmentDeadline,
     status: "recruiting",
