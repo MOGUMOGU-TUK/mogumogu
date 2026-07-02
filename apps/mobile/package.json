@@ -9,8 +9,7 @@
     "ios": "NODE_OPTIONS=--dns-result-order=ipv4first EXPO_NO_TELEMETRY=1 expo start --ios --localhost --port 8081 --clear",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests",
-    "seed": "node scripts/seed-firestore.mjs"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

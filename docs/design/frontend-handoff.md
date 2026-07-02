@@ -122,12 +122,9 @@ cp apps/mobile/.env.example apps/mobile/.env
 npm run web      # 브라우저 (가장 빠름)
 npm run ios      # iOS 시뮬레이터
 npm run start    # Expo Go QR
-
-# 4. (선택) Firestore 데모 데이터 시드 — 비어있을 때 1회
-npm run firebase:seed
 ```
 
-> `.env` 없이 실행하면 앱이 **자동으로 mock/seed 데이터로 폴백**되어 그냥 돌아간다. 실데이터를 보려면 `.env` 필수.
+> `.env` 없이 실행하면 앱이 **로컬 폴백(빈 목데이터)** 로 뜨므로 크래시 없이 화면 흐름은 확인할 수 있다. 실제 공구 데이터를 보려면 `.env` 설정 후 앱에서 직접 생성하면 된다.
 
 ---
 

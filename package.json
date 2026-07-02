@@ -11,7 +11,6 @@
     "test": "npm --prefix apps/mobile run test",
     "export:web": "npm --prefix apps/mobile exec -- expo export --platform web --output-dir dist",
     "functions:build": "npm --prefix firebase/functions run build",
-    "functions:serve": "npm --prefix firebase/functions run serve",
-    "firebase:seed": "npm --prefix apps/mobile run seed"
+    "functions:serve": "npm --prefix firebase/functions run serve"
   }
 }
