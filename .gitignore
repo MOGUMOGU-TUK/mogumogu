@@ -1,13 +1,27 @@
+# dependencies
 node_modules/
-dist/
-lib/
-.expo/
-.firebase/
+
+# env / secrets
 .env
 .env.*
+*.env
 !.env.example
-.DS_Store
-*.log
 apps/mobile/google-services.json
 apps/mobile/GoogleService-Info.plist
+
+# Expo / React Native build output
+.expo/
+dist/
+web-build/
+
+# Firebase
+.firebase/
+lib/
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
 .idea/
