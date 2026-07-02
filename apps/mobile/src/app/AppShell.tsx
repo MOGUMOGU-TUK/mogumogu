@@ -133,6 +133,15 @@ export function AppShell() {
     [deals, verifiedLocation],
   );
 
+  /* 지도: 좌표가 있는 피드 공구만 (카카오 마커용) */
+  const mapDeals = useMemo(
+    () =>
+      feedDeals.filter(
+        (d) => d.pickupLatitude != null && d.pickupLongitude != null
+      ),
+    [feedDeals],
+  );
+
   /* 피드 기준 selectedId / mapSel 보정 */
   useEffect(() => {
     if (feedDeals.length === 0) {
@@ -265,8 +274,8 @@ export function AppShell() {
     [deals, feedDeals, selectedId],
   );
   const mapPick = useMemo(
-    () => feedDeals.find((d) => d.id === mapSel) ?? feedDeals[0] ?? null,
-    [feedDeals, mapSel],
+    () => mapDeals.find((d) => d.id === mapSel) ?? mapDeals[0] ?? null,
+    [mapDeals, mapSel],
   );
 
   /* 내가 주최했거나 참여 중인 채팅방 (방장이 숨긴 방은 제외) */
@@ -446,6 +455,11 @@ export function AppShell() {
   }
 
   async function handleCreate() {
+    if (!verifiedLocation) {
+      showToast("동네 인증 후 공구를 만들 수 있어요.");
+      return;
+    }
+
     const input = {
       title: cTitle.trim() || `${createCat} 공구`,
       category: createCat,
@@ -594,7 +608,8 @@ export function AppShell() {
 
             {screen === "map" && (
               <MapScreen
-                deals={feedDeals}
+                deals={mapDeals}
+                verifiedLocation={verifiedLocation}
                 locationLabel={verifiedLocationLabel}
                 mapSel={mapSel}
                 pick={mapPick}

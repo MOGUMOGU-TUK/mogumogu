@@ -137,6 +137,8 @@ export type UpdateGongguInput = {
   totalPrice: number;
   totalQuantity: number;
   pickupPlaceName: string;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
   pickupExpectedTime: string;
   splitMethod: string;
   recruitmentDeadline: string;
