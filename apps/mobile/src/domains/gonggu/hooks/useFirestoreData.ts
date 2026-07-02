@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 
-import { isFirebaseConfigured } from "../../services/firebase/client";
-import { subscribeGonggus } from "../../services/firebase/gongguRepository";
+import { isFirebaseConfigured } from "../../../services/firebase/client";
+import { subscribeGonggus } from "../services/gongguRepository";
 import {
   subscribeParticipations,
   subscribeReviews,
   subscribeSettlements
-} from "../../services/firebase/participationRepository";
-import { seedSnapshot } from "../../services/mock/seed";
-import type { Gonggu, Participation, Review, Settlement } from "../../types/domain";
+} from "../services/participationRepository";
+import { seedSnapshot } from "../../../services/mock/seed";
+import type { Gonggu, Participation, Review, Settlement } from "../../../types/domain";
 
 export type GongguSource = "firestore" | "seed" | "loading";
 

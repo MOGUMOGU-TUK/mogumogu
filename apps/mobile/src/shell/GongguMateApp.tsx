@@ -16,7 +16,7 @@ import {
 
 import { useFirebaseAuth } from "../domains/auth/hooks/useFirebaseAuth";
 import { useChatMessages } from "../domains/chat/hooks/useChatMessages";
-import { useFirestoreData } from "../features/data/useFirestoreData";
+import { useFirestoreData } from "../domains/gonggu/hooks/useFirestoreData";
 import {
   verifyNeighborhood,
   mapLocationError,
@@ -30,7 +30,7 @@ import {
   createGongguDoc,
   hideGongguChatDoc,
   updateGongguDoc,
-} from "../services/firebase/gongguRepository";
+} from "../domains/gonggu/services/gongguRepository";
 import {
   initNotifications,
   loadNotifSettings,
@@ -41,7 +41,7 @@ import {
   cancelParticipationDoc,
   joinGongguDoc,
   submitReviewDoc,
-} from "../services/firebase/participationRepository";
+} from "../domains/gonggu/services/participationRepository";
 import type { MainTab, Screen } from "../app/navigationTypes";
 import { BottomNav } from "../app/components/BottomNav";
 import { LoginScreen } from "../domains/auth/components/LoginScreen";

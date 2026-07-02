@@ -6,8 +6,8 @@ import {
   writeBatch
 } from "firebase/firestore";
 
-import type { Gonggu, Participation, Review, Settlement, User } from "../../types/domain";
-import { getFirebaseServices } from "./client";
+import type { Gonggu, Participation, Review, Settlement, User } from "../../../types/domain";
+import { getFirebaseServices } from "../../../services/firebase/client";
 
 const GONGGUS = "gonggus";
 const PARTICIPATIONS = "participations";

@@ -1,8 +1,8 @@
 import { collection, doc, onSnapshot, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes, type FirebaseStorage } from "firebase/storage";
 
-import type { Gonggu, Settlement, User } from "../../types/domain";
-import { getFirebaseServices } from "./client";
+import type { Gonggu, Settlement, User } from "../../../types/domain";
+import { getFirebaseServices } from "../../../services/firebase/client";
 
 const GONGGUS = "gonggus";
 const SETTLEMENTS = "settlements";
