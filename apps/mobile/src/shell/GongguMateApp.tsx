@@ -5,7 +5,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StatusBar,
   Text,
   View,
@@ -44,6 +43,7 @@ import {
   submitReviewDoc,
 } from "../services/firebase/participationRepository";
 import type { MainTab, Screen } from "../app/navigationTypes";
+import { BottomNav } from "../app/components/BottomNav";
 import { LoginScreen } from "../domains/auth/components/LoginScreen";
 import { CreateScreen } from "../domains/gonggu/components/CreateScreen";
 import { DetailScreen as GongguDetailScreen } from "../domains/gonggu/components/DetailScreen";
@@ -63,27 +63,14 @@ import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
 import { gongguToUi, isDealNearLocation } from "../domains/gonggu/utils";
 import type { User } from "../types/domain";
+import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { t } from "../shared/theme/theme";
-import {
-  ChatBubbleIcon,
-  HomeIcon,
-  MapPinIcon,
-  PersonIcon,
-} from "../shared/ui/icons";
 import { styles } from "./appStyles";
 
 /* ------------------------------------------------------------------ */
 /* Types & data                                                        */
 /* ------------------------------------------------------------------ */
-
-type ConfirmState = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  danger?: boolean;
-  onConfirm: () => void;
-};
 
 /* ------------------------------------------------------------------ */
 /* Root                                                                */
@@ -790,169 +777,3 @@ export function GongguMateApp() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Vector icon primitives                                              */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/* Verify (nickname → locate → done)                                   */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/* Bottom nav                                                          */
-/* ------------------------------------------------------------------ */
-
-function BottomNav({
-  active,
-  onHome,
-  onMap,
-  onCreate,
-  onChat,
-  onMy,
-}: {
-  active: MainTab;
-  onHome: () => void;
-  onMap: () => void;
-  onCreate: () => void;
-  onChat: () => void;
-  onMy: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <NavItem
-        iconNode={
-          <HomeIcon size={22} color={active === "home" ? t.rose : t.dim} />
-        }
-        label="홈"
-        active={active === "home"}
-        onPress={onHome}
-      />
-      <NavItem
-        iconNode={
-          <MapPinIcon size={22} color={active === "map" ? t.rose : t.dim} />
-        }
-        label="지도"
-        active={active === "map"}
-        onPress={onMap}
-      />
-      <Pressable style={styles.navCenter} onPress={onCreate}>
-        <View style={styles.fab}>
-          <Text
-            style={{
-              fontSize: 28,
-              color: "#fff",
-              fontWeight: "300",
-              lineHeight: 30,
-            }}
-          >
-            +
-          </Text>
-        </View>
-      </Pressable>
-      <NavItem
-        iconNode={
-          <ChatBubbleIcon
-            size={22}
-            color={active === "chat" ? t.rose : t.dim}
-          />
-        }
-        label="채팅"
-        active={active === "chat"}
-        onPress={onChat}
-      />
-      <NavItem
-        iconNode={
-          <PersonIcon size={22} color={active === "mypage" ? t.rose : t.dim} />
-        }
-        label="마이"
-        active={active === "mypage"}
-        onPress={onMy}
-      />
-    </View>
-  );
-}
-
-function NavItem({
-  iconNode,
-  label,
-  active,
-  onPress,
-}: {
-  iconNode: React.ReactNode;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.navItem} onPress={onPress}>
-      {iconNode}
-      <Text
-        style={{
-          fontSize: 10,
-          fontWeight: "600",
-          color: active ? t.rose : t.dim,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Join bottom sheet                                                   */
-/* ------------------------------------------------------------------ */
-
-function ConfirmSheet({
-  title,
-  message,
-  confirmLabel,
-  danger,
-  onConfirm,
-  onClose,
-}: {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  danger?: boolean;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <Pressable style={styles.sheetBackdrop} onPress={onClose}>
-      <Pressable style={styles.sheet} onPress={() => {}}>
-        <View style={styles.sheetGrabber} />
-        <Text style={{ fontSize: 19, fontWeight: "800", color: t.ink }}>
-          {title}
-        </Text>
-        <Text
-          style={{ fontSize: 14, color: t.muted, marginTop: 8, lineHeight: 20 }}
-        >
-          {message}
-        </Text>
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
-          <Pressable
-            style={[styles.pillButton, styles.confirmCancel]}
-            onPress={onClose}
-          >
-            <Text style={[styles.pillButtonText, { color: t.ink }]}>취소</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.pillButton,
-              { flex: 1, backgroundColor: danger ? t.rose : t.pink },
-            ]}
-            onPress={onConfirm}
-          >
-            <Text style={[styles.pillButtonText, { color: "#fff" }]}>
-              {confirmLabel}
-            </Text>
-          </Pressable>
-        </View>
-      </Pressable>
-    </Pressable>
-  );
-}
