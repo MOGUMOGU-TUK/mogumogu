@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { EmptyState } from "../../../shared/ui/EmptyState";
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shell/appStyles";
 import { HOME_FILTERS, type Deal } from "../types";
@@ -148,24 +149,6 @@ export function HomeScreen({
           ))}
         </ScrollView>
       )}
-    </View>
-  );
-}
-
-function EmptyState({
-  emoji,
-  title,
-  desc,
-}: {
-  emoji: string;
-  title: string;
-  desc?: string;
-}) {
-  return (
-    <View style={styles.emptyWrap}>
-      <Text style={styles.emptyEmoji}>{emoji}</Text>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {!!desc && <Text style={styles.emptyDesc}>{desc}</Text>}
     </View>
   );
 }

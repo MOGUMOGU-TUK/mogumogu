@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { subscribeMessages } from "../../services/firebase/chatRepository";
-import { isFirebaseConfigured } from "../../services/firebase/client";
-import type { ChatMessage } from "../../types/domain";
+import { subscribeMessages } from "../services/chatRepository";
+import { isFirebaseConfigured } from "../../../services/firebase/client";
+import type { ChatMessage } from "../../../types/domain";
 
 /**
  * 공구별 채팅 메시지 실시간 구독 (mock → Firebase 전환 4단계).

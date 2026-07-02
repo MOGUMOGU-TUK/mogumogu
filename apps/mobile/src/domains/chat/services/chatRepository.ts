@@ -1,7 +1,7 @@
 import { addDoc, collection, onSnapshot, orderBy, query } from "firebase/firestore";
 
-import type { ChatMessage, User } from "../../types/domain";
-import { getFirebaseServices } from "./client";
+import type { ChatMessage, User } from "../../../types/domain";
+import { getFirebaseServices } from "../../../services/firebase/client";
 
 const CHATS = "chats";
 const MESSAGES = "messages";

@@ -18,7 +18,7 @@ import {
 } from "react-native-safe-area-context";
 
 import { useFirebaseAuth } from "../features/auth/useFirebaseAuth";
-import { useChatMessages } from "../features/chat/useChatMessages";
+import { useChatMessages } from "../domains/chat/hooks/useChatMessages";
 import { useFirestoreData } from "../features/data/useFirestoreData";
 import {
   verifyNeighborhood,
@@ -26,7 +26,7 @@ import {
   formatVerifiedLocationBrief,
   type VerifiedLocation
 } from "../services/location/verifyNeighborhood";
-import { sendMessageDoc } from "../services/firebase/chatRepository";
+import { sendMessageDoc } from "../domains/chat/services/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
   cancelGongguDoc,
@@ -53,18 +53,21 @@ import { HomeScreen as GongguHomeScreen } from "../domains/gonggu/components/Hom
 import { JoinSheet as GongguJoinSheet } from "../domains/gonggu/components/JoinSheet";
 import { TemperatureGradientBar as GradientBar } from "../domains/gonggu/components/TemperatureGradientBar";
 import { VerifyScreen } from "../domains/location/components/VerifyScreen";
+import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
+import { ChatScreen } from "../domains/chat/components/ChatScreen";
+import type { ChatMsg } from "../domains/chat/types";
+import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
 import {
   fmt,
   gongguToUi,
   isDealNearLocation,
-  memberStr,
   qtyStr,
-  statusOf,
   tempRatio,
   unitPrice,
 } from "../domains/gonggu/utils";
-import type { ChatMessage, User } from "../types/domain";
+import type { User } from "../types/domain";
+import { EmptyState } from "../shared/ui/EmptyState";
 import { t } from "../shared/theme/theme";
 import {
   BellIcon,
@@ -72,20 +75,12 @@ import {
   HomeIcon,
   MapPinIcon,
   PersonIcon,
-  SendArrowIcon,
 } from "../shared/ui/icons";
 import { styles } from "./appStyles";
 
 /* ------------------------------------------------------------------ */
 /* Types & data                                                        */
 /* ------------------------------------------------------------------ */
-
-type ChatMsg = {
-  type: "system" | "other" | "me";
-  name?: string;
-  text: string;
-  time?: string;
-};
 
 type ConfirmState = {
   title: string;
@@ -102,32 +97,6 @@ function mapPos(id: string): { left: string; top: string } {
   const top = 14 + Math.round((((h >> 8) & 0xff) / 255) * 64);
   return { left: `${left}%`, top: `${top}%` };
 }
-
-function chatMsgFromDomain(m: ChatMessage, myId: string): ChatMsg {
-  if (m.messageType === "system") return { type: "system", text: m.text };
-  return {
-    type: m.senderId === myId ? "me" : "other",
-    name: m.senderName,
-    text: m.text,
-    time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  };
-}
-
-const SEED_MSGS: ChatMsg[] = [
-  {
-    type: "system",
-    text: "공구방이 열렸어요. 픽업 장소와 소분 방식을 확인해주세요",
-  },
-  {
-    type: "other",
-    name: "공구장",
-    text: "안녕하세요! 픽업 시간에 맞춰 준비해둘게요 😊",
-    time: "오후 4:02",
-  },
-];
 
 const REVIEW_QUESTIONS: Array<{ key: ReviewKey; label: string }> = [
   { key: "time", label: "시간 약속을 잘 지켰나요?" },
@@ -879,24 +848,6 @@ export function GongguMateApp() {
 /* Home                                                                */
 /* ------------------------------------------------------------------ */
 
-function EmptyState({
-  emoji,
-  title,
-  desc,
-}: {
-  emoji: string;
-  title: string;
-  desc?: string;
-}) {
-  return (
-    <View style={styles.emptyWrap}>
-      <Text style={styles.emptyEmoji}>{emoji}</Text>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {!!desc && <Text style={styles.emptyDesc}>{desc}</Text>}
-    </View>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Map                                                                 */
 /* ------------------------------------------------------------------ */
@@ -1022,199 +973,6 @@ function MapScreen({
 }
 
 /* ------------------------------------------------------------------ */
-/* Detail                                                              */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-
-function ChatListScreen({
-  rooms,
-  meId,
-  onOpen,
-  onLeave,
-}: {
-  rooms: Deal[];
-  meId: string;
-  onOpen: (id: string) => void;
-  onLeave: (deal: Deal) => void;
-}) {
-  return (
-    <View style={styles.flex}>
-      <View style={styles.listHeader}>
-        <Text style={styles.listHeaderTitle}>채팅</Text>
-      </View>
-      {rooms.length === 0 ? (
-        <EmptyState
-          emoji="💬"
-          title="참여 중인 채팅이 없어요"
-          desc={
-            "공구에 참여하면 채팅방이 열려요.\n홈에서 마음에 드는 공구를 찾아보세요!"
-          }
-        />
-      ) : (
-        <ScrollView contentContainerStyle={styles.roomList}>
-          {rooms.map((room) => {
-            const ended = room.status === "canceled";
-            const isHost = room.hostId === meId;
-            return (
-              <View key={room.id} style={styles.roomRow}>
-                <Pressable
-                  style={{
-                    flex: 1,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                  onPress={() => onOpen(room.id)}
-                >
-                  <View
-                    style={[styles.roomThumb, { backgroundColor: room.tint }]}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.roomTitle} numberOfLines={1}>
-                      {room.title}
-                    </Text>
-                    <Text style={styles.roomMeta} numberOfLines={1}>
-                      {isHost ? "내 공구" : "참여 중"} ·{" "}
-                      {ended ? "종료됨" : qtyStr(room)}
-                    </Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  style={styles.roomLeaveBtn}
-                  onPress={() => onLeave(room)}
-                >
-                  <Text style={styles.roomLeaveText}>나가기</Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </ScrollView>
-      )}
-    </View>
-  );
-}
-
-function ChatScreen({
-  deal,
-  messages,
-  onBack,
-  onSend,
-  onLeave,
-}: {
-  deal: Deal;
-  messages: ChatMsg[];
-  onBack: () => void;
-  onSend: (text: string) => void;
-  onLeave: () => void;
-}) {
-  const [input, setInput] = useState("");
-
-  function submit() {
-    if (!input.trim()) return;
-    onSend(input);
-    setInput("");
-  }
-
-  return (
-    <View style={styles.flex}>
-      <View style={styles.chatHeader}>
-        <Pressable onPress={onBack} style={{ padding: 4 }}>
-          <Text style={styles.backArrow}>‹</Text>
-        </Pressable>
-        <View
-          style={[styles.chatHeaderThumb, { backgroundColor: deal.tint }]}
-        />
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{ fontSize: 15, fontWeight: "700", color: t.ink }}
-            numberOfLines={1}
-          >
-            {deal.title}
-          </Text>
-          <Text style={{ fontSize: 12, color: t.muted }}>
-            {memberStr(deal)} · {statusOf(deal)}
-          </Text>
-        </View>
-        <Pressable style={styles.chatLeaveBtn} onPress={onLeave}>
-          <Text style={styles.chatLeaveText}>나가기</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView
-        style={styles.chatBody}
-        contentContainerStyle={{ padding: 14, gap: 10 }}
-      >
-        {messages.map((m, i) => {
-          if (m.type === "system") {
-            return (
-              <View key={i} style={{ alignItems: "center" }}>
-                <Text style={styles.systemMsg}>{m.text}</Text>
-              </View>
-            );
-          }
-          const isMe = m.type === "me";
-          return (
-            <View
-              key={i}
-              style={{
-                flexDirection: "row",
-                justifyContent: isMe ? "flex-end" : "flex-start",
-              }}
-            >
-              <View style={{ maxWidth: "74%" }}>
-                {!isMe && <Text style={styles.msgName}>{m.name}</Text>}
-                <View
-                  style={{
-                    flexDirection: isMe ? "row" : "row-reverse",
-                    alignItems: "flex-end",
-                    gap: 6,
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.bubble,
-                      isMe ? styles.bubbleMe : styles.bubbleOther,
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        lineHeight: 20,
-                        color: isMe ? "#fff" : t.ink,
-                      }}
-                    >
-                      {m.text}
-                    </Text>
-                  </View>
-                  {!!m.time && <Text style={styles.msgTime}>{m.time}</Text>}
-                </View>
-              </View>
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.composer}>
-        <View style={styles.composerInputWrap}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="메시지 보내기"
-            placeholderTextColor={t.dim}
-            style={styles.composerInput}
-            onSubmitEditing={submit}
-            returnKeyType="send"
-          />
-        </View>
-        <Pressable style={styles.sendButton} onPress={submit}>
-          <SendArrowIcon size={16} color="#fff" />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 /* Review                                                              */
 /* ------------------------------------------------------------------ */
 
