@@ -8,6 +8,7 @@ import {
 
 import type { Gonggu, Participation, Review, Settlement, User } from "../../../types/domain";
 import { getFirebaseServices } from "../../../services/firebase/client";
+import { assertJoinable, normalizeQuantity, unitPriceOf } from "../participation";
 
 const GONGGUS = "gonggus";
 const PARTICIPATIONS = "participations";
@@ -73,16 +74,10 @@ export async function joinGongguDoc(gongguId: string, user: User, quantity: numb
     return; // 이미 참여함
   }
 
-  const qty = Math.max(1, Math.floor(quantity));
-  const remaining = gonggu.totalQuantity - gonggu.claimedQuantity;
-  if (remaining <= 0) {
-    throw new Error("모집이 완료된 공구예요.");
-  }
-  if (qty > remaining) {
-    throw new Error("남은 수량을 초과했어요.");
-  }
+  const qty = normalizeQuantity(quantity);
+  assertJoinable(gonggu, qty);
 
-  const unitPrice = Math.ceil(gonggu.totalPrice / Math.max(1, gonggu.totalQuantity));
+  const unitPrice = unitPriceOf(gonggu);
   const nextClaimed = gonggu.claimedQuantity + qty;
   const participation: Participation = {
     gongguId,

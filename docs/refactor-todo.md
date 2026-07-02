@@ -72,32 +72,32 @@ apps/mobile/src/
 
 ---
 
-## 7단계: 최소 테스트 (순수 로직부터)
+## 7단계: 최소 테스트 (순수 로직부터) — 완료
 
-- [ ] `jest`가 TS/RN 테스트를 돌리도록 설정 (`jest-expo` preset 또는 `ts-jest` — **이 단계 유일한 변수**, 첫 1개 돌리는 데 설정 시간 소요 가능)
-- [ ] 단가 계산: `ceil(totalPrice / totalQuantity)`
-- [ ] 남은 수량 계산
-- [ ] 모집 완료 상태 계산 (`claimedQuantity >= totalQuantity`)
-- [ ] 참여 수량이 남은 수량을 초과할 때 막는 가드
-- [ ] `gongguToUi` 변환 결과 (필드 매핑)
-- [ ] 완료 조건: `npm --prefix apps/mobile run test`가 **실제 테스트를 실행·통과**. `--passWithNoTests` 의존 탈출.
+- [x] `jest` 설정: 별도 preset 없이 프로젝트 babel(`babel-preset-expo`→`@babel/preset-typescript`)을 `babel-jest`가 사용, node 환경 ([apps/mobile/jest.config.js](../apps/mobile/jest.config.js)). `@types/jest`만 devDep 추가, tsconfig `types`에 등록.
+- [x] 단가 계산: `ceil(totalPrice / totalQuantity)` — `unitPrice`/`unitPriceOf`
+- [x] 남은 수량 계산 — `remain`/`remainingQuantity`
+- [x] 모집 완료 상태 계산 (`claimedQuantity >= totalQuantity`) — `statusOf`/`isRecruited`
+- [x] 참여 수량이 남은 수량을 초과할 때 막는 가드 — `assertJoinable` (repository의 인라인 가드를 순수 모듈 `domains/gonggu/participation.ts`로 추출)
+- [x] `gongguToUi` 변환 결과 (필드 매핑·후기 수·거리·마감 임박)
+- [x] 완료 조건: `npm test`가 실제 테스트 22개 실행·통과. `--passWithNoTests` 제거.
 
 ---
 
-## 8단계: 문서 정리 (구조 확정 후)
+## 8단계: 문서 정리 — 완료
 
-- [ ] `README.md`, `docs/local-setup.md`, `firebase/setup.md`, `docs/qa/test-plan.md` 갱신
-- [ ] 포함: 실제 실행 경로 `apps/mobile`, 루트 명령(`npm run web/ios/typecheck`), 데이터 모델 기준, MVP에서 mock/POC vs 실연동 구분, 다음 단계 TODO
-- [ ] 구경로 잔재 정리 (`04_app_react_native/app` 등)
+- [x] `README.md`, `docs/local-setup.md`, `firebase/setup.md`, `docs/qa/test-plan.md` 갱신
+- [x] 포함: 실제 실행 경로 `apps/mobile`, 루트 명령(`web/ios/typecheck/test`), mock/POC vs 실연동 구분, 카카오 REST 키(동네 인증) 요구, 다음 단계 TODO
+- [x] 구경로 잔재 정리: `04_app_react_native/app`은 이미 제거됨(확인). 문서 내 죽은 경로 참조를 `apps/mobile`로 교체.
 
-## 9단계: 최종 검증
+## 9단계: 최종 검증 — 통과
 
-- [ ] `npm run typecheck`
-- [ ] `npm run functions:build`
-- [ ] `npm --prefix apps/mobile run test`
-- [ ] `npm run web` 실행 확인
+- [x] `npm run typecheck`
+- [x] `npm run functions:build`
+- [x] `npm test` (22 passing)
+- [x] `npm run export:web` (웹 번들 성공)
 
 ## 남은 MVP 리스크 (추적)
 
-- [ ] `firestore.rules`의 죽은 `gonggus/{id}/participants` 서브컬렉션 블록 제거 + POC 완화 규칙 강화 계획
-- [ ] Phase 2: 콜러블(`joinGonggu`/`confirmPickup`/`submitReview`)을 authoritative mutation으로 실제 연동
+- [x] `firestore.rules`의 죽은 `gonggus/{id}/participants` 서브컬렉션 블록 제거 (참여는 top-level `participations`로 통일). POC 완화 규칙 강화는 Phase 2에서.
+- [ ] Phase 2: 콜러블(`joinGonggu`/`confirmPickup`/`submitReview`)을 authoritative mutation으로 실제 연동 + POC 완화 규칙 재강화
