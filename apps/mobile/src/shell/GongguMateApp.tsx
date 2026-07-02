@@ -38,7 +38,7 @@ import {
   loadNotifSettings,
   saveNotifSettings,
   type NotifSettings,
-} from "../services/firebase/notificationService";
+} from "../domains/notifications/services/notificationService";
 import {
   cancelParticipationDoc,
   joinGongguDoc,
@@ -55,6 +55,8 @@ import { VerifyScreen } from "../domains/location/components/VerifyScreen";
 import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";
 import { MapScreen } from "../domains/map/components/MapScreen";
+import { NotifScreen } from "../domains/notifications/components/NotifScreen";
+import { NOTIF_ITEMS, type NotifItem, type NotifKey } from "../domains/notifications/types";
 import { ReviewScreen } from "../domains/review/components/ReviewScreen";
 import type { ReviewKey } from "../domains/review/types";
 import type { ChatMsg } from "../domains/chat/types";
@@ -69,7 +71,6 @@ import type { User } from "../types/domain";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { t } from "../shared/theme/theme";
 import {
-  BellIcon,
   ChatBubbleIcon,
   HomeIcon,
   MapPinIcon,
@@ -88,29 +89,6 @@ type ConfirmState = {
   danger?: boolean;
   onConfirm: () => void;
 };
-
-const NOTIF_ITEMS: Array<{ key: NotifKey; label: string }> = [
-  { key: "join", label: "새 참여자 발생" },
-  { key: "full", label: "모집 인원 달성" },
-  { key: "deadline", label: "모집 마감 임박" },
-  { key: "chat", label: "새 채팅 메시지" },
-];
-
-type NotifKey = keyof NotifSettings;
-
-type NotifItem = {
-  id: string;
-  title: string;
-  body: string;
-  gongguId?: string;
-  type?: string;
-  receivedAt: string;
-  read: boolean;
-};
-
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
 /* Root                                                                */
@@ -994,182 +972,6 @@ function Toggle({ on, onPress }: { on: boolean; onPress: () => void }) {
     >
       <View style={[styles.toggleKnob, { left: on ? 22 : 3 }]} />
     </Pressable>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Notifications screen                                                */
-/* ------------------------------------------------------------------ */
-
-const TYPE_LABEL: Record<string, string> = {
-  join: "새 참여자",
-  full: "모집 완료",
-  deadline: "마감 임박",
-  chat: "채팅 메시지",
-};
-
-function relativeTime(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return "방금";
-  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
-  return `${Math.floor(diff / 86400)}일 전`;
-}
-
-function NotifScreen({
-  items,
-  deals,
-  onBack,
-  onOpen,
-  onClear,
-}: {
-  items: NotifItem[];
-  deals: Deal[];
-  onBack: () => void;
-  onOpen: (gongguId: string, notifId: string) => void;
-  onClear: () => void;
-}) {
-  return (
-    <View style={styles.flex}>
-      <View style={styles.homeHeader}>
-        <Pressable onPress={onBack} style={{ padding: 4, marginLeft: -4 }}>
-          <Text style={{ fontSize: 20, color: t.ink, fontWeight: "300" }}>
-            ‹
-          </Text>
-        </Pressable>
-        <Text
-          style={{
-            fontSize: 17,
-            fontWeight: "800",
-            color: t.ink,
-            flex: 1,
-            textAlign: "center",
-          }}
-        >
-          알림
-        </Text>
-        {items.length > 0 ? (
-          <Pressable onPress={onClear}>
-            <Text style={{ fontSize: 13, color: t.muted }}>모두 지우기</Text>
-          </Pressable>
-        ) : (
-          <View style={{ width: 60 }} />
-        )}
-      </View>
-
-      {items.length === 0 ? (
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-          }}
-        >
-          <BellIcon size={40} color={t.dim} />
-          <Text style={{ fontSize: 15, fontWeight: "700", color: t.dim }}>
-            알림이 없어요
-          </Text>
-          <Text style={{ fontSize: 13, color: t.muted }}>
-            공구 참여·채팅 알림이 여기에 표시돼요
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 8,
-            paddingBottom: 32,
-            gap: 8,
-          }}
-        >
-          {items.map((item) => {
-            const deal = item.gongguId
-              ? deals.find((d) => d.id === item.gongguId)
-              : null;
-            const typeLabel = item.type ? (TYPE_LABEL[item.type] ?? "") : "";
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => item.gongguId && onOpen(item.gongguId, item.id)}
-                style={[
-                  styles.notifItemCard,
-                  !item.read && { borderWidth: 2, borderColor: t.pink },
-                ]}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "flex-start",
-                    gap: 12,
-                  }}
-                >
-                  <View style={styles.notifIconWrap}>
-                    <BellIcon size={16} color={t.rose} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 6,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {!!typeLabel && (
-                        <View style={styles.notifTypeBadge}>
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              fontWeight: "700",
-                              color: t.rose,
-                            }}
-                          >
-                            {typeLabel}
-                          </Text>
-                        </View>
-                      )}
-                      <Text style={{ fontSize: 11, color: t.muted }}>
-                        {relativeTime(item.receivedAt)}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: t.ink,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {item.title}
-                    </Text>
-                    {!!item.body && (
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          color: t.inkSoft,
-                          lineHeight: 18,
-                        }}
-                        numberOfLines={2}
-                      >
-                        {item.body}
-                      </Text>
-                    )}
-                    {deal && (
-                      <Text
-                        style={{ fontSize: 12, color: t.muted, marginTop: 4 }}
-                      >
-                        {deal.title} · {deal.spot}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      )}
-    </View>
   );
 }
 

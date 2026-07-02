@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Platform } from "react-native";
 
-import { getFirebaseServices } from "./client";
+import { getFirebaseServices } from "../../../services/firebase/client";
 
 export type NotifSettings = {
   join: boolean;
