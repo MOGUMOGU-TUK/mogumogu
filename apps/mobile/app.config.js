@@ -9,7 +9,7 @@ const withPinnedAGP = (config) => {
   return withProjectBuildGradle(config, (config) => {
     config.modResults.contents = config.modResults.contents.replace(
       "classpath('com.android.tools.build:gradle')",
-      "classpath('com.android.tools.build:gradle:8.7.2')"
+      "classpath('com.android.tools.build:gradle:8.9.1')"
     );
     return config;
   });
@@ -26,7 +26,7 @@ const withGradleWrapper = (config) => {
       let contents = fs.readFileSync(filePath, "utf-8");
       contents = contents.replace(
         /distributionUrl=.*gradle-.*-bin\.zip/,
-        "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip"
+        "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.11.1-bin.zip"
       );
       fs.writeFileSync(filePath, contents);
       return config;

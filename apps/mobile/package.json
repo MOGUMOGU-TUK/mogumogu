@@ -32,6 +32,11 @@
     "react-native-web": "^0.21.2",
     "react-native-webview": "13.16.1"
   },
+  "expo": {
+    "install": {
+      "exclude": ["jest", "@types/jest"]
+    }
+  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "patch-package": "^8.0.1",
