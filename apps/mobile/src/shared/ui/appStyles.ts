@@ -509,8 +509,8 @@ export const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: t.line,
     paddingTop: 8,
+    paddingBottom: 8,
     paddingHorizontal: 8,
-    /* paddingBottom is set dynamically via useSafeAreaInsets */
   },
   navItem: { flex: 1, alignItems: "center", justifyContent: "flex-start", minHeight: 46, gap: 3 },
   navCenter: { flex: 1, alignItems: "center", justifyContent: "flex-start" },

@@ -29,7 +29,8 @@ export function BottomNav({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+    <View>
+    <View style={styles.nav}>
       <NavItem
         iconNode={
           <HomeIcon size={22} color={active === "home" ? t.rose : t.dim} />
@@ -79,6 +80,10 @@ export function BottomNav({
         active={active === "mypage"}
         onPress={onMy}
       />
+    </View>
+    {insets.bottom > 0 && (
+      <View style={{ height: insets.bottom, backgroundColor: "#fff" }} />
+    )}
     </View>
   );
 }
