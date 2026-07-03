@@ -11,7 +11,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "googleServicesFile": "./GoogleService-Info.plist",
+
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "com.tuk.mogumogu",
-      "googleServicesFile": "./google-services.json",
+
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
