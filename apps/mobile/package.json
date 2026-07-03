@@ -16,13 +16,13 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
-    "expo": "^56.0.12",
+    "expo": "~56.0.13",
     "expo-auth-session": "~56.0.14",
     "expo-build-properties": "~56.0.20",
-    "expo-dev-client": "~56.0.20",
-    "expo-image-picker": "^56.0.18",
-    "expo-location": "^56.0.18",
-    "expo-notifications": "^56.0.18",
+    "expo-dev-client": "~56.0.21",
+    "expo-image-picker": "~56.0.19",
+    "expo-location": "~56.0.19",
+    "expo-notifications": "~56.0.19",
     "expo-web-browser": "~56.0.5",
     "firebase": "^12.15.0",
     "react": "19.2.3",
@@ -34,7 +34,10 @@
   },
   "expo": {
     "install": {
-      "exclude": ["jest", "@types/jest"]
+      "exclude": [
+        "jest",
+        "@types/jest"
+      ]
     }
   },
   "devDependencies": {
