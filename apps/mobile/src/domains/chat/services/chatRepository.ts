@@ -1,7 +1,8 @@
-import { addDoc, collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
 
 import type { ChatMessage, User } from "../../../types/domain";
 import { getFirebaseServices } from "../../../services/firebase/client";
+import { writeNotifDoc } from "../../notifications/services/notificationService";
 
 const CHATS = "chats";
 const MESSAGES = "messages";
@@ -49,4 +50,26 @@ export async function sendMessageDoc(gongguId: string, sender: User, text: strin
     messageType: "user",
     createdAt: new Date().toISOString()
   });
+
+  // 채팅 알림 → 참여자 + 공구장에게 (발신자 제외)
+  const [gongguSnap, partSnap] = await Promise.all([
+    getDoc(doc(services.db, "gonggus", gongguId)),
+    getDocs(query(collection(services.db, "participations"), where("gongguId", "==", gongguId))),
+  ]);
+  const gongguData = gongguSnap.data();
+  const participantIds = partSnap.docs.map((d) => String(d.data().userId));
+  const hostId = gongguData?.hostUserId as string | undefined;
+  const targets = [
+    ...new Set([...participantIds, ...(hostId ? [hostId] : [])]),
+  ].filter((id) => id !== sender.id);
+  void Promise.all(
+    targets.map((uid) =>
+      writeNotifDoc(uid, {
+        type: "chat",
+        title: `[${gongguData?.title ?? "공구"}] 새 채팅`,
+        body: `${sender.nickname}: ${trimmed.slice(0, 30)}`,
+        gongguId,
+      })
+    )
+  );
 }
