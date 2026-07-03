@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -51,7 +52,9 @@ import { VerifyScreen } from "../domains/location/components/VerifyScreen";
 import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";
 import { MapScreen } from "../domains/map/components/MapScreen";
+import { CompletedDealsScreen } from "../domains/mypage/components/CompletedDealsScreen";
 import { MyPageScreen } from "../domains/mypage/components/MyPageScreen";
+import { ProfileEditScreen } from "../domains/mypage/components/ProfileEditScreen";
 import { NotifScreen } from "../domains/notifications/components/NotifScreen";
 import type { NotifItem, NotifKey } from "../domains/notifications/types";
 import { ReviewScreen } from "../domains/review/components/ReviewScreen";
@@ -66,6 +69,13 @@ import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { t } from "../shared/theme/theme";
 import { styles } from "../shared/ui/appStyles";
+
+const NICKNAME_CHANGE_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const profileStorageKey = (uid: string) => `mogumogu.profile.${uid}`;
+
+function formatDateLabel(date: Date) {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
 
 /**
  * App composition root.
@@ -88,6 +98,7 @@ export function AppShell() {
   const [toast, setToast] = useState("");
 
   const [nickname, setNickname] = useState("");
+  const [lastNicknameChangedAt, setLastNicknameChangedAt] = useState<string | null>(null);
   const [verifyStep, setVerifyStep] = useState(0);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -119,6 +130,33 @@ export function AppShell() {
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
   const data = useFirestoreData(auth.user?.uid ?? null);
+
+  useEffect(() => {
+    const uid = auth.user?.uid;
+    if (!uid) {
+      setLastNicknameChangedAt(null);
+      return;
+    }
+
+    void AsyncStorage.getItem(profileStorageKey(uid))
+      .then((raw) => {
+        if (!raw) {
+          setLastNicknameChangedAt(null);
+          return;
+        }
+        const saved = JSON.parse(raw) as {
+          nickname?: string;
+          lastNicknameChangedAt?: string | null;
+        };
+        if (saved.nickname?.trim()) {
+          setNickname(saved.nickname.trim());
+        }
+        setLastNicknameChangedAt(saved.lastNicknameChangedAt ?? null);
+      })
+      .catch(() => {
+        setLastNicknameChangedAt(null);
+      });
+  }, [auth.user?.uid]);
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
@@ -261,6 +299,23 @@ export function AppShell() {
     [auth.user, nickname, verifiedLocation]
   );
 
+  const nicknameChangeState = useMemo(() => {
+    if (!lastNicknameChangedAt) {
+      return { canChange: true, nextDate: null };
+    }
+
+    const lastChangedTime = new Date(lastNicknameChangedAt).getTime();
+    if (Number.isNaN(lastChangedTime)) {
+      return { canChange: true, nextDate: null };
+    }
+
+    const nextTime = lastChangedTime + NICKNAME_CHANGE_INTERVAL_MS;
+    return {
+      canChange: Date.now() >= nextTime,
+      nextDate: formatDateLabel(new Date(nextTime)),
+    };
+  }, [lastNicknameChangedAt]);
+
   /* 채팅 실시간 구독 */
   const liveMessages = useChatMessages(selectedId);
   const chatMsgs: ChatMsg[] = useMemo(
@@ -295,6 +350,28 @@ export function AppShell() {
       }),
     [deals, data.participations, currentUser.id],
   );
+
+  const completedDeals = useMemo(
+    () =>
+      deals.filter((d) => {
+        const isHost = d.hostId === currentUser.id;
+        const isPart = data.participations.some(
+          (p) => p.gongguId === d.id && p.userId === currentUser.id,
+        );
+        return d.status === "completed" && (isHost || isPart);
+      }),
+    [deals, data.participations, currentUser.id],
+  );
+
+  const myPageStats = useMemo(() => {
+    return {
+      completedDealCount: completedDeals.length,
+      receivedReviewCount: data.reviews.filter(
+        (r) => r.revieweeId === currentUser.id,
+      ).length,
+      noshowCount: 0,
+    };
+  }, [completedDeals.length, currentUser.id, data.reviews]);
 
   useEffect(() => {
     return () => {
@@ -338,6 +415,14 @@ export function AppShell() {
       }
       if (screen === "notifications") {
         go("home", "home");
+        return true;
+      }
+      if (screen === "completedDeals") {
+        go("mypage", "mypage");
+        return true;
+      }
+      if (screen === "profileEdit") {
+        go("mypage", "mypage");
         return true;
       }
       if (screen === "map" || screen === "mypage") {
@@ -524,6 +609,51 @@ export function AppShell() {
     showToast("후기가 등록됐어요. 고마워요!");
   }
 
+  async function saveProfileNickname(nextNickname: string) {
+    const trimmed = nextNickname.trim();
+    if (!trimmed) return;
+
+    const nicknameChanged = trimmed !== currentUser.nickname.trim();
+    if (nicknameChanged && !nicknameChangeState.canChange) {
+      showToast("닉네임은 30일에 한 번만 바꿀 수 있어요.");
+      return;
+    }
+
+    const changedAt = nicknameChanged
+      ? new Date().toISOString()
+      : lastNicknameChangedAt;
+    setNickname(trimmed);
+    setLastNicknameChangedAt(changedAt);
+
+    const uid = auth.user?.uid;
+    if (uid) {
+      await AsyncStorage.setItem(
+        profileStorageKey(uid),
+        JSON.stringify({
+          nickname: trimmed,
+          lastNicknameChangedAt: changedAt,
+        }),
+      );
+    }
+
+    go("mypage", "mypage");
+    showToast("프로필을 저장했어요");
+  }
+
+  async function findNeighborhoodFromProfile() {
+    setLocating(true);
+    setLocateError(null);
+    try {
+      const location = await verifyNeighborhood();
+      setVerifiedLocation(location);
+      showToast("동네를 다시 확인했어요");
+    } catch (error: unknown) {
+      setLocateError(mapLocationError(error));
+    } finally {
+      setLocating(false);
+    }
+  }
+
   const showNav = (
     ["home", "map", "chatList", "chat", "mypage"] as Screen[]
   ).includes(screen);
@@ -700,6 +830,9 @@ export function AppShell() {
               <MyPageScreen
                 nickname={currentUser.nickname}
                 locationLabel={verifiedLocationLabel}
+                completedDealCount={myPageStats.completedDealCount}
+                receivedReviewCount={myPageStats.receivedReviewCount}
+                noshowCount={myPageStats.noshowCount}
                 notif={notif}
                 onToggle={(key) => {
                   setNotif((prev) => {
@@ -714,11 +847,35 @@ export function AppShell() {
                     return next;
                   });
                 }}
+                onEditProfile={() => setScreen("profileEdit")}
+                onOpenCompletedDeals={() => setScreen("completedDeals")}
                 onReviewDemo={() => {
                   if (deals.length > 0) setSelectedId(deals[0]!.id);
                   setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
                   setScreen("review");
                 }}
+              />
+            )}
+
+            {screen === "profileEdit" && (
+              <ProfileEditScreen
+                nickname={currentUser.nickname}
+                locationLabel={verifiedLocationLabel}
+                canChangeNickname={nicknameChangeState.canChange}
+                nextNicknameChangeDate={nicknameChangeState.nextDate}
+                locationLoading={locating}
+                locationError={locateError}
+                onBack={() => go("mypage", "mypage")}
+                onSave={(nextNickname) => void saveProfileNickname(nextNickname)}
+                onFindNeighborhood={() => void findNeighborhoodFromProfile()}
+              />
+            )}
+
+            {screen === "completedDeals" && (
+              <CompletedDealsScreen
+                deals={completedDeals}
+                meId={currentUser.id}
+                onBack={() => go("mypage", "mypage")}
               />
             )}
 
