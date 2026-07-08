@@ -204,7 +204,7 @@ export async function cancelGongguDoc(gongguId: string, options?: { hideForHost?
 
 /**
  * 방장이 거래완료 버튼을 누른 경우: 공구 상태를 후기 대기로 전환하고 채팅에 안내 메시지를 남긴다.
- * 방장의 채팅 목록에서도 즉시 숨긴다.
+ * 참여자와 동일하게, 방장도 직접 나가기 전까지는 채팅 목록에 계속 보인다.
  */
 export async function completeGongguDoc(gongguId: string): Promise<void> {
   const services = getFirebaseServices();
@@ -216,7 +216,6 @@ export async function completeGongguDoc(gongguId: string): Promise<void> {
   const batch = writeBatch(db);
   batch.update(doc(db, GONGGUS, gongguId), {
     status: "review_required",
-    hostHidden: true,
   });
   batch.set(doc(collection(db, CHATS, gongguId, MESSAGES)), {
     gongguId,
@@ -230,7 +229,7 @@ export async function completeGongguDoc(gongguId: string): Promise<void> {
 }
 
 /**
- * 방장이 이미 종료된 공구의 채팅방에서 "나가기"를 누른 경우: 본인 채팅 목록에서만 숨긴다.
+ * 방장이 이미 종료된(후기대기/완료/취소) 공구의 채팅방에서 "나가기"를 누른 경우: 본인 채팅 목록에서만 숨긴다.
  */
 export async function hideGongguChatDoc(gongguId: string): Promise<void> {
   const services = getFirebaseServices();

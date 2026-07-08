@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { SendArrowIcon } from "../../../shared/ui/icons";
@@ -16,6 +16,7 @@ export function ChatScreen({
   onSend,
   onLeave,
   onComplete,
+  onOpenDetail,
 }: {
   deal: Deal;
   messages: ChatMsg[];
@@ -24,8 +25,10 @@ export function ChatScreen({
   onSend: (text: string) => void;
   onLeave: () => void;
   onComplete: () => void;
+  onOpenDetail: () => void;
 }) {
   const [input, setInput] = useState("");
+  const scrollRef = useRef<ScrollView>(null);
 
   function submit() {
     if (!input.trim()) return;
@@ -39,20 +42,25 @@ export function ChatScreen({
         <Pressable onPress={onBack} style={{ padding: 4 }}>
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
-        <View
-          style={[styles.chatHeaderThumb, { backgroundColor: deal.tint }]}
-        />
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{ fontSize: 15, fontWeight: "700", color: t.ink }}
-            numberOfLines={1}
-          >
-            {deal.title}
-          </Text>
-          <Text style={{ fontSize: 12, color: t.muted }}>
-            {memberStr(deal)} · {statusOf(deal)}
-          </Text>
-        </View>
+        <Pressable
+          onPress={onOpenDetail}
+          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 11 }}
+        >
+          <View
+            style={[styles.chatHeaderThumb, { backgroundColor: deal.tint }]}
+          />
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ fontSize: 15, fontWeight: "700", color: t.ink }}
+              numberOfLines={1}
+            >
+              {deal.title}
+            </Text>
+            <Text style={{ fontSize: 12, color: t.muted }}>
+              {memberStr(deal)} · {statusOf(deal)}
+            </Text>
+          </View>
+        </Pressable>
         {isHost && !["review_required", "completed", "canceled"].includes(deal.status) ? (
           <Pressable style={styles.chatLeaveBtn} onPress={onComplete}>
             <Text style={[styles.chatLeaveText, { color: t.rose, fontWeight: "700" }]}>거래완료</Text>
@@ -65,8 +73,12 @@ export function ChatScreen({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.chatBody}
         contentContainerStyle={{ padding: 14, gap: 10 }}
+        onContentSizeChange={() =>
+          scrollRef.current?.scrollToEnd({ animated: false })
+        }
       >
         {messages.map((m, i) => {
           if (m.type === "system") {
@@ -89,11 +101,14 @@ export function ChatScreen({
                 {!isMe && <Text style={styles.msgName}>{m.name}</Text>}
                 <View
                   style={{
-                    flexDirection: isMe ? "row" : "row-reverse",
+                    flexDirection: "row",
                     alignItems: "flex-end",
-                    gap: 6,
+                    gap: 4,
                   }}
                 >
+                  {isMe && !!m.time && (
+                    <Text style={styles.msgTime}>{m.time}</Text>
+                  )}
                   <View
                     style={[
                       styles.bubble,
@@ -110,7 +125,9 @@ export function ChatScreen({
                       {m.text}
                     </Text>
                   </View>
-                  {!!m.time && <Text style={styles.msgTime}>{m.time}</Text>}
+                  {!isMe && !!m.time && (
+                    <Text style={styles.msgTime}>{m.time}</Text>
+                  )}
                 </View>
               </View>
             </View>
