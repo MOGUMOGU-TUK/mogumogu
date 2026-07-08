@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "../theme/theme";
 import { styles } from "./appStyles";
@@ -26,9 +27,10 @@ export function ConfirmSheet({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <Pressable style={styles.sheetBackdrop} onPress={onClose}>
-      <Pressable style={styles.sheet} onPress={() => {}}>
+      <Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 26) }]} onPress={() => {}}>
         <View style={styles.sheetGrabber} />
         <Text style={{ fontSize: 19, fontWeight: "800", color: t.ink }}>
           {title}

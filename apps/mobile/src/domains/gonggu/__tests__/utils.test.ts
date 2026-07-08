@@ -1,6 +1,6 @@
 import type { Gonggu, Review } from "../../../types/domain";
 import type { Deal } from "../types";
-import { barPct, gongguToUi, remain, statusOf, unitPrice } from "../utils";
+import { barPct, formatRecruitmentDeadline, gongguToUi, remain, statusOf, unitPrice } from "../utils";
 
 function deal(overrides: Partial<Deal>): Deal {
   return {
@@ -131,5 +131,13 @@ describe("gongguToUi", () => {
   it("마감 임박 문구면 urgent=true", () => {
     expect(gongguToUi(gonggu({ recruitmentDeadline: "2시간 남음" }), []).urgent).toBe(true);
     expect(gongguToUi(gonggu({ recruitmentDeadline: "내일" }), []).urgent).toBe(false);
+  });
+
+  it("미정·빈 마감은 픽업 일정 조율로 표시한다", () => {
+    expect(gongguToUi(gonggu({ recruitmentDeadline: "미정" }), []).deadline).toBe(
+      "픽업 일정 조율",
+    );
+    expect(gongguToUi(gonggu({ recruitmentDeadline: "" }), []).deadline).toBe("픽업 일정 조율");
+    expect(formatRecruitmentDeadline("내일")).toBe("내일");
   });
 });

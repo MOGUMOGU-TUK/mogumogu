@@ -2,13 +2,17 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
+  query,
+  where,
   writeBatch
 } from "firebase/firestore";
 
 import type { Gonggu, Participation, Review, Settlement, User } from "../../../types/domain";
 import { getFirebaseServices } from "../../../services/firebase/client";
 import { assertJoinable, normalizeQuantity, unitPriceOf } from "../participation";
+import { writeNotifDoc } from "../../notifications/services/notificationService";
 
 const GONGGUS = "gonggus";
 const PARTICIPATIONS = "participations";
@@ -107,6 +111,35 @@ export async function joinGongguDoc(gongguId: string, user: User, quantity: numb
     createdAt: new Date().toISOString()
   });
   await batch.commit();
+
+  // 참여 알림 → 공구장에게
+  if (gonggu.hostUserId && gonggu.hostUserId !== user.id) {
+    void writeNotifDoc(gonggu.hostUserId, {
+      type: "join",
+      title: "새 참여자가 생겼어요!",
+      body: `[${gonggu.title}] ${user.nickname}님이 합류했어요`,
+      gongguId,
+    });
+  }
+
+  // 모집 완료 알림 → 전체 참여자에게
+  if (nextClaimed >= gonggu.totalQuantity) {
+    const partSnap = await getDocs(
+      query(collection(db, PARTICIPATIONS), where("gongguId", "==", gongguId))
+    );
+    const participantIds = partSnap.docs.map((d) => String(d.data().userId));
+    const allIds = [...new Set([...participantIds, gonggu.hostUserId].filter(Boolean) as string[])];
+    void Promise.all(
+      allIds.map((uid) =>
+        writeNotifDoc(uid, {
+          type: "full",
+          title: "모집 완료! 🎉",
+          body: `[${gonggu.title}] 필요한 수량이 모두 모였어요`,
+          gongguId,
+        })
+      )
+    );
+  }
 }
 
 /**

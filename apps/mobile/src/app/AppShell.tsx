@@ -1,4 +1,3 @@
-import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -27,14 +26,19 @@ import { sendMessageDoc } from "../domains/chat/services/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
   cancelGongguDoc,
+  completeGongguDoc,
   createGongguDoc,
   hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
 import {
   DEFAULT_NOTIF_SETTINGS,
+  clearNotifsDoc,
   initNotifications,
   loadNotifSettings,
+  markNotifReadDoc,
   saveNotifSettings,
+  subscribeNotifs,
+  writeNotifDoc,
   type NotifSettings,
 } from "../domains/notifications/services/notificationService";
 import {
@@ -66,7 +70,7 @@ import type { ReviewKey } from "../domains/review/types";
 import type { ChatMsg } from "../domains/chat/types";
 import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
-import { gongguToUi } from "../domains/gonggu/utils";
+import { DEFAULT_RECRUITMENT_DEADLINE_LABEL, gongguToUi } from "../domains/gonggu/utils";
 import { isWithinRadiusKm } from "../domains/location/services/geo";
 import type { User } from "../types/domain";
 import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
@@ -154,6 +158,7 @@ export function AppShell() {
   });
   const [notif, setNotif] = useState<NotifSettings>(DEFAULT_NOTIF_SETTINGS);
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
+  const [dismissedReviewIds, setDismissedReviewIds] = useState<string[]>([]);
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
@@ -193,7 +198,7 @@ export function AppShell() {
   );
 
   const feedDeals = useMemo(
-    () => deals.filter((d) => d.status !== "canceled"),
+    () => deals.filter((d) => !["canceled", "review_required", "completed"].includes(d.status)),
     [deals],
   );
 
@@ -253,67 +258,12 @@ export function AppShell() {
       .catch(() => showToast("알림 설정을 불러오지 못했어요."));
   }, [auth.user?.uid, auth.user?.isAnonymous]);
 
-  /* 포그라운드 알림 수신 → 알림 목록에 저장 */
+  /* 인앱 알림 — Firestore 실시간 구독 */
   useEffect(() => {
-    const sub = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        const { title, body, data } = notification.request.content;
-        const payload = data as { gongguId?: string; type?: string };
-        setNotifItems((prev) => [
-          {
-            id: notification.request.identifier,
-            title: title ?? "모구모구",
-            body: body ?? "",
-            gongguId: payload?.gongguId,
-            type: payload?.type,
-            receivedAt: new Date().toISOString(),
-            read: false,
-          },
-          ...prev,
-        ]);
-      },
-    );
-    return () => sub.remove();
-  }, []);
-
-  /* 알림 탭 시 해당 화면으로 이동 */
-  useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const { title, body, data } = response.notification.request.content;
-        const payload = data as { gongguId?: string; type?: string };
-        /* 알림 목록에 추가 (중복 방지) */
-        const id = response.notification.request.identifier;
-        setNotifItems((prev) => {
-          if (prev.some((n) => n.id === id)) return prev;
-          return [
-            {
-              id,
-              title: title ?? "모구모구",
-              body: body ?? "",
-              gongguId: payload?.gongguId,
-              type: payload?.type,
-              receivedAt: new Date().toISOString(),
-              read: true,
-            },
-            ...prev,
-          ];
-        });
-        if (payload?.gongguId) {
-          setSelectedId(payload.gongguId);
-          setShowJoin(false);
-          if (payload.type === "chat") {
-            setTab("chat");
-            setScreen("chat");
-          } else {
-            setTab("home");
-            setScreen("detail");
-          }
-        }
-      },
-    );
-    return () => sub.remove();
-  }, []);
+    const uid = auth.user?.uid;
+    if (!uid || auth.user?.isAnonymous) return;
+    return subscribeNotifs(uid, setNotifItems);
+  }, [auth.user?.uid, auth.user?.isAnonymous]);
 
   /* 현재 사용자 (도메인 타입) */
   const currentUser = useMemo<User>(
@@ -367,6 +317,25 @@ export function AppShell() {
     () => mapDeals.find((d) => d.id === mapSel) ?? mapDeals[0] ?? null,
     [mapDeals, mapSel],
   );
+
+  /* 내가 참여했고 아직 후기를 안 쓴 완료 공구 (모달 유도용) */
+  const pendingReviewDeal = useMemo(() => {
+    if (!currentUser.id || auth.user?.isAnonymous) return null;
+    return (
+      deals.find(
+        (d) =>
+          d.status === "review_required" &&
+          d.hostId !== currentUser.id &&
+          !dismissedReviewIds.includes(d.id) &&
+          data.participations.some(
+            (p) =>
+              p.gongguId === d.id &&
+              p.userId === currentUser.id &&
+              p.reviewStatus !== "completed",
+          ),
+      ) ?? null
+    );
+  }, [deals, data.participations, currentUser.id, dismissedReviewIds, auth.user?.isAnonymous]);
 
   /* 내가 주최했거나 참여 중인 채팅방 (방장이 숨긴 방은 제외) */
   const myRooms = useMemo(
@@ -563,6 +532,42 @@ export function AppShell() {
     });
   }
 
+  function completeGonggu(deal: Deal) {
+    setConfirm({
+      title: "거래완료로 표시할까요?",
+      message: "참여자들에게 후기 작성 안내를 보내고 채팅방이 종료돼요.",
+      confirmLabel: "거래완료",
+      onConfirm: async () => {
+        setConfirm(null);
+        if (!isFirebaseConfigured()) {
+          showToast("Firebase 설정이 필요해요.");
+          return;
+        }
+        try {
+          await completeGongguDoc(deal.id);
+        } catch {
+          showToast("거래완료 처리 중 오류가 발생했어요.");
+          return;
+        }
+        const participantIds = data.participations
+          .filter((p) => p.gongguId === deal.id)
+          .map((p) => p.userId);
+        void Promise.all(
+          participantIds.map((uid) =>
+            writeNotifDoc(uid, {
+              type: "review",
+              title: "거래가 완료됐어요!",
+              body: `[${deal.title}] 후기를 남겨주세요`,
+              gongguId: deal.id,
+            }),
+          ),
+        );
+        go("chatList", "chat");
+        showToast("거래완료! 참여자들에게 후기 안내를 보냈어요");
+      },
+    });
+  }
+
   async function confirmJoin(quantity: number) {
     if (!selectedId) return;
     if (isFirebaseConfigured()) {
@@ -615,13 +620,13 @@ export function AppShell() {
       pickupPlaceName: cPickup || "장소 미정",
       pickupExpectedTime: cTime || "시간 미정",
       splitMethod: "수량 기준 비례 분담",
-      recruitmentDeadline: "미정",
+      recruitmentDeadline: DEFAULT_RECRUITMENT_DEADLINE_LABEL,
       ...(verifiedLocation
         ? {
-            pickupLatitude: verifiedLocation.latitude,
-            pickupLongitude: verifiedLocation.longitude,
-            pickupNeighborhood: verifiedLocation.neighborhood
-          }
+          pickupLatitude: verifiedLocation.latitude,
+          pickupLongitude: verifiedLocation.longitude,
+          pickupNeighborhood: verifiedLocation.neighborhood
+        }
         : {}),
     };
 
@@ -855,9 +860,11 @@ export function AppShell() {
                 <ChatScreen
                   deal={sel}
                   messages={chatMsgs}
+                  isHost={sel.hostId === currentUser.id}
                   onBack={() => go("chatList", "chat")}
                   onSend={sendMessage}
                   onLeave={() => leaveRoom(sel)}
+                  onComplete={() => completeGonggu(sel)}
                 />
               ) : (
                 <EmptyState
@@ -964,16 +971,16 @@ export function AppShell() {
                 deals={deals}
                 onBack={() => go("home", "home")}
                 onOpen={(gongguId, notifId) => {
-                  setNotifItems((prev) =>
-                    prev.map((n) =>
-                      n.id === notifId ? { ...n, read: true } : n,
-                    ),
-                  );
+                  const uid = auth.user?.uid;
+                  if (uid) void markNotifReadDoc(uid, notifId);
                   setDetailFrom("notifications");
                   setSelectedId(gongguId);
                   setScreen("detail");
                 }}
-                onClear={() => setNotifItems([])}
+                onClear={() => {
+                  const uid = auth.user?.uid;
+                  if (uid) void clearNotifsDoc(uid);
+                }}
               />
             )}
           </View>
@@ -1005,6 +1012,22 @@ export function AppShell() {
               danger={confirm.danger}
               onConfirm={confirm.onConfirm}
               onClose={() => setConfirm(null)}
+            />
+          )}
+
+          {pendingReviewDeal && showNav && (
+            <ConfirmSheet
+              title="후기를 남겨주세요!"
+              message={`[${pendingReviewDeal.title}] 거래가 완료됐어요. 참여 후기를 남겨주시겠어요?`}
+              confirmLabel="후기 작성"
+              onConfirm={() => {
+                setSelectedId(pendingReviewDeal.id);
+                setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
+                setScreen("review");
+              }}
+              onClose={() =>
+                setDismissedReviewIds((prev) => [...prev, pendingReviewDeal.id])
+              }
             />
           )}
 

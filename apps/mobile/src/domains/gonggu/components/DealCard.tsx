@@ -15,24 +15,21 @@ export function DealCard({ deal, onPress }: { deal: Deal; onPress: () => void })
         </View>
       </View>
       <View style={{ flex: 1 }}>
-        <View style={styles.rowBetween}>
-          <View
-            style={[
-              styles.deadlinePill,
-              { backgroundColor: deal.urgent ? t.urgentBg : t.calmBg },
-            ]}
+        <View
+          style={[
+            styles.deadlinePill,
+            { alignSelf: "flex-start", backgroundColor: deal.urgent ? t.urgentBg : t.calmBg },
+          ]}
+        >
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: "700",
+              color: deal.urgent ? t.urgentInk : t.chipInk,
+            }}
           >
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: "700",
-                color: deal.urgent ? t.urgentInk : t.chipInk,
-              }}
-            >
-              {deal.deadline}
-            </Text>
-          </View>
-          <Text style={{ fontSize: 11, color: t.dim }}>{deal.dist}</Text>
+            {deal.deadline}
+          </Text>
         </View>
         <Text style={styles.dealTitle} numberOfLines={1}>
           {deal.title}
