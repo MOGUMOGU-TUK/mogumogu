@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { CREATE_CATS } from "../types";
 import { fmt } from "../utils";
+import { PlaceSearchSheet, type PickupPlace } from "./PlaceSearchSheet";
 
 type CreateScreenProps = {
   cat: string;
@@ -12,12 +14,14 @@ type CreateScreenProps = {
   onTitle: (v: string) => void;
   total: string;
   qty: string;
-  pickup: string;
   time: string;
   onTotal: (v: string) => void;
   onQty: (v: string) => void;
-  onPickup: (v: string) => void;
   onTime: (v: string) => void;
+  pickupPlace: PickupPlace | null;
+  onPickupPlace: (place: PickupPlace) => void;
+  initialCenter?: { lat: number; lng: number };
+  locationAvailable: boolean;
   onBack: () => void;
   onPost: () => void | Promise<void>;
 };
@@ -29,16 +33,19 @@ export function CreateScreen({
   onTitle,
   total,
   qty,
-  pickup,
   time,
   onTotal,
   onQty,
-  onPickup,
   onTime,
+  pickupPlace,
+  onPickupPlace,
+  initialCenter,
+  locationAvailable,
   onBack,
   onPost,
 }: CreateScreenProps) {
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
+  const [showPlaceSearch, setShowPlaceSearch] = useState(false);
 
   return (
     <View style={styles.flex}>
@@ -76,14 +83,7 @@ export function CreateScreen({
 
         <View>
           <Text style={styles.fieldLabel}>카테고리</Text>
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              marginTop: 9,
-              flexWrap: "wrap",
-            }}
-          >
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
             {CREATE_CATS.map((label) => {
               const active = label === cat;
               return (
@@ -149,27 +149,52 @@ export function CreateScreen({
           </Text>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 11 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>픽업 장소</Text>
-            <TextInput
-              value={pickup}
-              onChangeText={onPickup}
-              placeholder="정문 CU 앞"
-              placeholderTextColor={t.dim}
-              style={styles.createInput}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>픽업 시간</Text>
-            <TextInput
-              value={time}
-              onChangeText={onTime}
-              placeholder="오늘 저녁 7시"
-              placeholderTextColor={t.dim}
-              style={styles.createInput}
-            />
-          </View>
+        <View>
+          <Text style={styles.fieldLabel}>픽업 장소</Text>
+          <Pressable
+            onPress={() => setShowPlaceSearch(true)}
+            style={[
+              styles.createInput,
+              {
+                height: undefined,
+                minHeight: 46,
+                paddingVertical: 10,
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: t.border,
+                borderRadius: 10,
+              },
+            ]}
+          >
+            <Text
+              style={{ fontSize: 14, color: pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
+              numberOfLines={1}
+            >
+              {pickupPlace
+                ? pickupPlace.isDefault
+                  ? `현위치: ${pickupPlace.address || pickupPlace.name}`
+                  : pickupPlace.name
+                : !locationAvailable
+                  ? "위치를 찾을 수 없어요. GPS를 확인해주세요."
+                  : "장소를 검색하세요"}
+            </Text>
+            {pickupPlace && !pickupPlace.isDefault && !!pickupPlace.address && pickupPlace.name !== pickupPlace.address && (
+              <Text style={{ fontSize: 11, color: t.muted, marginTop: 2 }} numberOfLines={1}>
+                {pickupPlace.address}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
+        <View>
+          <Text style={styles.fieldLabel}>픽업 시간</Text>
+          <TextInput
+            value={time}
+            onChangeText={onTime}
+            placeholder="오늘 저녁 7시"
+            placeholderTextColor={t.dim}
+            style={styles.createInput}
+          />
         </View>
 
         <View>
@@ -192,6 +217,16 @@ export function CreateScreen({
           </Text>
         </Pressable>
       </View>
+
+      <PlaceSearchSheet
+        visible={showPlaceSearch}
+        initialCenter={initialCenter}
+        onSelect={(place) => {
+          onPickupPlace(place);
+          setShowPlaceSearch(false);
+        }}
+        onClose={() => setShowPlaceSearch(false)}
+      />
     </View>
   );
 }

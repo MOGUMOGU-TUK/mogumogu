@@ -22,6 +22,7 @@ import {
   type VerifiedLocation
 } from "../domains/location/services/verifyNeighborhood";
 import { sendMessageDoc } from "../domains/chat/services/chatRepository";
+import { reverseGeocode } from "../domains/map/services/kakaoGeo";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
   cancelGongguDoc,
@@ -48,6 +49,7 @@ import type { MainTab, Screen } from "./navigationTypes";
 import { BottomNav } from "./components/BottomNav";
 import { LoginScreen } from "../domains/auth/components/LoginScreen";
 import { CreateScreen } from "../domains/gonggu/components/CreateScreen";
+import type { PickupPlace } from "../domains/gonggu/components/PlaceSearchSheet";
 import { DetailScreen as GongguDetailScreen } from "../domains/gonggu/components/DetailScreen";
 import { HomeScreen as GongguHomeScreen } from "../domains/gonggu/components/HomeScreen";
 import { JoinSheet as GongguJoinSheet } from "../domains/gonggu/components/JoinSheet";
@@ -104,7 +106,7 @@ export function AppShell() {
   const [cTitle, setCTitle] = useState("");
   const [cTotal, setCTotal] = useState("");
   const [cQty, setCQty] = useState("10");
-  const [cPickup, setCPickup] = useState("");
+  const [cPickupPlace, setCPickupPlace] = useState<PickupPlace | null>(null);
   const [cTime, setCTime] = useState("");
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
     time: 0,
@@ -196,6 +198,21 @@ export function AppShell() {
     if (!uid || auth.user?.isAnonymous) return;
     return subscribeNotifs(uid, setNotifItems);
   }, [auth.user?.uid, auth.user?.isAnonymous]);
+
+  /* 공구 만들기 진입 시 현 위치를 기본 픽업 장소로 설정 */
+  useEffect(() => {
+    if (screen !== "create" || !verifiedLocation || cPickupPlace) return;
+    const fallback = {
+      name: verifiedLocation.neighborhood || "현재 위치",
+      address: "",
+      latitude: verifiedLocation.latitude,
+      longitude: verifiedLocation.longitude,
+      isDefault: true as const,
+    };
+    void reverseGeocode(verifiedLocation.latitude, verifiedLocation.longitude)
+      .then((address) => setCPickupPlace({ ...fallback, address }))
+      .catch(() => setCPickupPlace(fallback));
+  }, [screen, verifiedLocation]);
 
   /* 현재 사용자 (도메인 타입) */
   const currentUser = useMemo<User>(
@@ -455,8 +472,7 @@ export function AppShell() {
       } catch {
         /* 실패해도 로컬에는 표시 */
       }
-    }
-    if (!isFirebaseConfigured()) {
+    } else {
       setExtraMsgs((prev) => [
         ...prev,
         { type: "me", name: currentUser.nickname, text: trimmed, time: "지금" },
@@ -475,17 +491,23 @@ export function AppShell() {
       category: createCat,
       totalPrice: Number(cTotal) || 0,
       totalQuantity: Number(cQty) || 1,
-      pickupPlaceName: cPickup || "장소 미정",
+      pickupPlaceName: cPickupPlace?.name ?? "장소 미정",
       pickupExpectedTime: cTime || "시간 미정",
       splitMethod: "수량 기준 비례 분담",
       recruitmentDeadline: DEFAULT_RECRUITMENT_DEADLINE_LABEL,
-      ...(verifiedLocation
+      ...(cPickupPlace
         ? {
-          pickupLatitude: verifiedLocation.latitude,
-          pickupLongitude: verifiedLocation.longitude,
-          pickupNeighborhood: verifiedLocation.neighborhood
+          pickupLatitude: cPickupPlace.latitude,
+          pickupLongitude: cPickupPlace.longitude,
+          pickupNeighborhood: verifiedLocation?.neighborhood,
         }
-        : {}),
+        : verifiedLocation
+          ? {
+            pickupLatitude: verifiedLocation.latitude,
+            pickupLongitude: verifiedLocation.longitude,
+            pickupNeighborhood: verifiedLocation.neighborhood,
+          }
+          : {}),
     };
 
     if (!isFirebaseConfigured()) {
@@ -503,7 +525,7 @@ export function AppShell() {
     setCTitle("");
     setCTotal("");
     setCQty("10");
-    setCPickup("");
+    setCPickupPlace(null);
     setCTime("");
     go("home", "home");
     showToast("공구가 게시됐어요! 🎉");
@@ -542,7 +564,6 @@ export function AppShell() {
       />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "android" ? 0 : 0}
         style={styles.flex}
       >
         <View style={[styles.root, Platform.OS === "web" && styles.rootWeb]}>
@@ -680,12 +701,16 @@ export function AppShell() {
                 onTitle={setCTitle}
                 total={cTotal}
                 qty={cQty}
-                pickup={cPickup}
                 time={cTime}
                 onTotal={setCTotal}
                 onQty={setCQty}
-                onPickup={setCPickup}
                 onTime={setCTime}
+                pickupPlace={cPickupPlace}
+                onPickupPlace={setCPickupPlace}
+                initialCenter={verifiedLocation
+                  ? { lat: verifiedLocation.latitude, lng: verifiedLocation.longitude }
+                  : undefined}
+                locationAvailable={!!verifiedLocation}
                 onBack={() => go(tab)}
                 onPost={handleCreate}
               />

@@ -9,7 +9,7 @@ export function BasketIcon({
   size?: number;
   color?: string;
 }) {
-  const lw = Math.max(2.5, size * 0.065);
+  const bw = Math.max(2.5, size * 0.065);
   const bodyTint = color === "#fff" ? t.pink : "#fff";
   return (
     <View
@@ -25,9 +25,9 @@ export function BasketIcon({
         style={{
           width: size * 0.46,
           height: size * 0.22,
-          borderTopWidth: lw,
-          borderLeftWidth: lw,
-          borderRightWidth: lw,
+          borderTopWidth: bw,
+          borderLeftWidth: bw,
+          borderRightWidth: bw,
           borderBottomWidth: 0,
           borderColor: color,
           borderTopLeftRadius: size * 0.23,
@@ -52,7 +52,7 @@ export function BasketIcon({
         <View
           style={{
             width: "72%",
-            height: lw * 0.75,
+            height: bw * 0.75,
             backgroundColor: bodyTint,
             opacity: 0.3,
             marginBottom: size * 0.08,
@@ -61,7 +61,7 @@ export function BasketIcon({
         <View
           style={{
             width: "72%",
-            height: lw * 0.75,
+            height: bw * 0.75,
             backgroundColor: bodyTint,
             opacity: 0.3,
           }}
@@ -529,6 +529,55 @@ export function SendArrowIcon({
           borderLeftColor: color,
         }}
       />
+    </View>
+  );
+}
+
+export function LocationIcon({
+  size = 22,
+  color = t.ink,
+}: {
+  size?: number;
+  color?: string;
+}) {
+  const s = size;
+  const c = s / 2;          // 중심
+  const r = s * 0.46;       // 원 반지름 (크게)
+  const bw = Math.max(1, Math.round(s * 0.06));
+  const innerR = r - bw;
+  const armLen = innerR * 0.35; // 선 길이 (짧게)
+
+  return (
+    <View style={{ width: s, height: s }}>
+      {/* 원 테두리 */}
+      <View style={{
+        position: "absolute",
+        left: c - r,
+        top: c - r,
+        width: r * 2,
+        height: r * 2,
+        borderRadius: r,
+        borderWidth: bw,
+        borderColor: color,
+      }} />
+      {/* 중심 점 */}
+      <View style={{
+        position: "absolute",
+        left: c - bw,
+        top: c - bw,
+        width: bw * 2,
+        height: bw * 2,
+        borderRadius: bw,
+        backgroundColor: color,
+      }} />
+      {/* 상단 선 */}
+      <View style={{ position: "absolute", left: c - bw / 2, top: c - innerR, width: bw, height: armLen, backgroundColor: color }} />
+      {/* 하단 선 */}
+      <View style={{ position: "absolute", left: c - bw / 2, top: c + innerR - armLen, width: bw, height: armLen, backgroundColor: color }} />
+      {/* 좌측 선 */}
+      <View style={{ position: "absolute", top: c - bw / 2, left: c - innerR, width: armLen, height: bw, backgroundColor: color }} />
+      {/* 우측 선 */}
+      <View style={{ position: "absolute", top: c - bw / 2, left: c + innerR - armLen, width: armLen, height: bw, backgroundColor: color }} />
     </View>
   );
 }
