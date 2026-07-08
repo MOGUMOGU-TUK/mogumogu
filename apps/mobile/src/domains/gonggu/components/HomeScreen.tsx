@@ -16,6 +16,7 @@ type HomeScreenProps = {
   onOpen: (id: string) => void;
   hasUnread: boolean;
   onBell: () => void;
+  onLocationPress: () => void;
 };
 
 export function HomeScreen({
@@ -27,6 +28,7 @@ export function HomeScreen({
   onOpen,
   hasUnread,
   onBell,
+  onLocationPress,
 }: HomeScreenProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -42,7 +44,7 @@ export function HomeScreen({
   return (
     <View style={styles.flex}>
       <View style={styles.homeHeader}>
-        <Pressable style={styles.locButton}>
+        <Pressable style={styles.locButton} onPress={onLocationPress}>
           <Text style={styles.locText}>{headerLocation}</Text>
           <Text style={styles.chevron}>⌄</Text>
         </Pressable>

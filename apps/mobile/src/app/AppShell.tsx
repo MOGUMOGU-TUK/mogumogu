@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -164,6 +165,8 @@ export function AppShell() {
   const [locateError, setLocateError] = useState<string | null>(null);
   const [verifiedLocation, setVerifiedLocation] = useState<VerifiedLocation | null>(null);
   const verifiedLocationLabel = formatVerifiedLocationBrief(verifiedLocation);
+  /** 로그인 유저의 프로필(닉네임·인증동네) 복원이 끝났는지. 세션 복원 라우팅 게이트. */
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
@@ -191,9 +194,11 @@ export function AppShell() {
     const uid = auth.user?.uid;
     if (!uid) {
       setLastNicknameChangedAt(null);
+      setProfileLoaded(false);
       return;
     }
 
+    setProfileLoaded(false);
     void Promise.all([
       loadUserProfileDoc(uid).catch(() => null),
       AsyncStorage.getItem(profileStorageKey(uid)).catch(() => null),
@@ -228,7 +233,8 @@ export function AppShell() {
       })
       .catch(() => {
         setLastNicknameChangedAt(null);
-      });
+      })
+      .finally(() => setProfileLoaded(true));
   }, [auth.user?.uid]);
 
   /* ── 도메인 → UI 어댑터 ── */
@@ -277,10 +283,19 @@ export function AppShell() {
     }
   }, [deals, feedDeals, selectedId, mapSel]);
 
-  /* Google 등 소셜 로그인 성공 시 카카오와 동일하게 닉네임·동네 인증으로 이동 */
+  /*
+   * 로그인 세션 복원 후 라우팅.
+   * 프로필 로드가 끝난 뒤에만 판정한다(로드 전 판정 시 verifiedLocation 이 아직 null 이라 잘못 튕김).
+   * - 이미 온보딩(닉네임+동네 인증) 완료 → 홈으로 (새로고침해도 홈 유지)
+   * - 미완료 → 기존대로 닉네임·동네 인증 화면으로
+   */
   useEffect(() => {
     if (skipSocialAutoVerifyRef.current) return;
-    if (screen === "login" && auth.user && !auth.user.isAnonymous) {
+    if (screen === "login" && auth.user && !auth.user.isAnonymous && profileLoaded) {
+      if (verifiedLocation && nickname.trim()) {
+        go("home", "home");
+        return;
+      }
       if (auth.user.displayName && !nickname.trim()) {
         setNickname(auth.user.displayName.slice(0, 12));
       }
@@ -288,7 +303,7 @@ export function AppShell() {
       setLocateError(null);
       setScreen("verify");
     }
-  }, [auth.user, screen, nickname]);
+  }, [auth.user, screen, nickname, profileLoaded, verifiedLocation]);
 
   /* 로그인 후 FCM 토큰 등록 + 알림 설정 로드 */
   useEffect(() => {
@@ -829,6 +844,28 @@ export function AppShell() {
     }
   }
 
+  /**
+   * 온보딩(닉네임+동네 인증) 완료 → 프로필을 영속화하고 홈으로.
+   * 저장은 best-effort(실패해도 홈 진입은 막지 않음). 저장돼야 다음 새로고침에서 홈으로 복원된다.
+   */
+  async function completeOnboarding() {
+    const uid = auth.user?.uid;
+    if (uid) {
+      const profile: UserProfileDoc = {
+        nickname: nickname.trim(),
+        lastNicknameChangedAt,
+        verifiedLocation,
+      };
+      try {
+        await saveUserProfileDoc(uid, profile);
+        await AsyncStorage.setItem(profileStorageKey(uid), JSON.stringify(profile));
+      } catch {
+        /* 저장 실패해도 온보딩 진행은 막지 않는다 (다음 진입 때 재저장 가능) */
+      }
+    }
+    go("home", "home");
+  }
+
   function toggleNotif(key: NotifKey) {
     setNotif((prev) => {
       const next: NotifSettings = {
@@ -850,6 +887,15 @@ export function AppShell() {
     ["home", "map", "chatList", "chat", "mypage"] as Screen[]
   ).includes(screen);
 
+  /*
+   * 세션/프로필 복원 판정이 끝나기 전(로그인 화면 단계)에는 로그인 UI 대신 스플래시를 보여
+   * 새로고침 시 login → home/verify 로 튀는 깜빡임을 가린다. (시드 모드는 status "disabled" 라 해당 없음)
+   */
+  const bootPending =
+    screen === "login" &&
+    (auth.status === "loading" ||
+      (!!auth.user && !auth.user.isAnonymous && !profileLoaded));
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <StatusBar
@@ -865,17 +911,22 @@ export function AppShell() {
           <View
             style={[styles.body, !showNav && { paddingBottom: insets.bottom }]}
           >
-            {screen === "login" && (
-              <LoginScreen
-                auth={auth}
-                onFirebaseRequired={() => {
-                  showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
-                }}
-                onGoogleLogin={() => {
-                  skipSocialAutoVerifyRef.current = false;
-                }}
-              />
-            )}
+            {screen === "login" &&
+              (bootPending ? (
+                <View style={[styles.flex, { alignItems: "center", justifyContent: "center" }]}>
+                  <ActivityIndicator size="large" color={t.pink} />
+                </View>
+              ) : (
+                <LoginScreen
+                  auth={auth}
+                  onFirebaseRequired={() => {
+                    showToast("Firebase 설정이 필요해요. apps/mobile/.env를 설정해주세요.");
+                  }}
+                  onGoogleLogin={() => {
+                    skipSocialAutoVerifyRef.current = false;
+                  }}
+                />
+              ))}
 
             {screen === "verify" && (
               <VerifyScreen
@@ -904,7 +955,7 @@ export function AppShell() {
                     })
                     .finally(() => setLocating(false));
                 }}
-                onStart={() => go("home", "home")}
+                onStart={() => void completeOnboarding()}
               />
             )}
 
@@ -918,6 +969,17 @@ export function AppShell() {
                 onOpen={openDeal}
                 hasUnread={notifItems.some((n) => !n.read)}
                 onBell={() => setScreen("notifications")}
+                onLocationPress={() =>
+                  setConfirm({
+                    title: "동네 다시 인증",
+                    message: "현재 위치로 동네를 다시 인증할까요?",
+                    confirmLabel: "다시 인증",
+                    onConfirm: () => {
+                      setConfirm(null);
+                      void findNeighborhoodFromProfile();
+                    },
+                  })
+                }
               />
             )}
 
