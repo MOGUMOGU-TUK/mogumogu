@@ -35,7 +35,7 @@ export function subscribeGonggus(
 ): () => void {
   const services = getFirebaseServices();
   if (!services) {
-    return () => {};
+    return () => { };
   }
 
   return onSnapshot(
@@ -96,10 +96,10 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     pickupDistanceMeters: 300,
     ...(typeof input.pickupLatitude === "number" && typeof input.pickupLongitude === "number"
       ? {
-          pickupLatitude: input.pickupLatitude,
-          pickupLongitude: input.pickupLongitude,
-          pickupNeighborhood: input.pickupNeighborhood ?? host.neighborhood
-        }
+        pickupLatitude: input.pickupLatitude,
+        pickupLongitude: input.pickupLongitude,
+        pickupNeighborhood: input.pickupNeighborhood ?? host.neighborhood
+      }
       : {}),
     pickupExpectedTime: input.pickupExpectedTime,
     recruitmentDeadline: input.recruitmentDeadline,
@@ -198,6 +198,33 @@ export async function cancelGongguDoc(gongguId: string, options?: { hideForHost?
     text: "종료된 공구입니다.",
     messageType: "system",
     createdAt: new Date().toISOString()
+  });
+  await batch.commit();
+}
+
+/**
+ * 방장이 거래완료 버튼을 누른 경우: 공구 상태를 후기 대기로 전환하고 채팅에 안내 메시지를 남긴다.
+ * 방장의 채팅 목록에서도 즉시 숨긴다.
+ */
+export async function completeGongguDoc(gongguId: string): Promise<void> {
+  const services = getFirebaseServices();
+  if (!services) {
+    throw new Error("Firebase가 설정되지 않았습니다.");
+  }
+  const { db } = services;
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, GONGGUS, gongguId), {
+    status: "review_required",
+    hostHidden: true,
+  });
+  batch.set(doc(collection(db, CHATS, gongguId, MESSAGES)), {
+    gongguId,
+    senderId: "system",
+    senderName: "mogumogu",
+    text: "거래가 완료됐어요. 후기를 남겨주세요!",
+    messageType: "system",
+    createdAt: new Date().toISOString(),
   });
   await batch.commit();
 }
