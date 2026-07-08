@@ -31,6 +31,7 @@ import {
   hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
 import {
+  DEFAULT_NOTIF_SETTINGS,
   initNotifications,
   loadNotifSettings,
   saveNotifSettings,
@@ -53,7 +54,10 @@ import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";
 import { MapScreen } from "../domains/map/components/MapScreen";
 import { CompletedDealsScreen } from "../domains/mypage/components/CompletedDealsScreen";
-import { MyPageScreen } from "../domains/mypage/components/MyPageScreen";
+import {
+  MyPageScreen,
+  type MyPageReviewTag,
+} from "../domains/mypage/components/MyPageScreen";
 import { ProfileEditScreen } from "../domains/mypage/components/ProfileEditScreen";
 import { NotifScreen } from "../domains/notifications/components/NotifScreen";
 import type { NotifItem, NotifKey } from "../domains/notifications/types";
@@ -72,6 +76,34 @@ import { styles } from "../shared/ui/appStyles";
 
 const NICKNAME_CHANGE_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
 const profileStorageKey = (uid: string) => `mogumogu.profile.${uid}`;
+const REVIEW_TAG_DEFS: Array<
+  MyPageReviewTag & { keys: string[] }
+> = [
+  {
+    emoji: "⏱️",
+    text: "시간 약속을 잘 지켜요",
+    count: 0,
+    keys: ["time", "시간 약속", "시간"],
+  },
+  {
+    emoji: "⚖️",
+    text: "소분이 공정해요",
+    count: 0,
+    keys: ["fair", "소분", "공정"],
+  },
+  {
+    emoji: "💬",
+    text: "친절하고 매너있어요",
+    count: 0,
+    keys: ["manner", "communication", "소통 매너", "친절", "매너"],
+  },
+  {
+    emoji: "🧺",
+    text: "상품 설명이 정확해요",
+    count: 0,
+    keys: ["desc", "description", "상품 설명", "설명"],
+  },
+];
 
 function formatDateLabel(date: Date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
@@ -96,6 +128,7 @@ export function AppShell() {
   const [showJoin, setShowJoin] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState("");
+  const [completedDealsMode, setCompletedDealsMode] = useState<"view" | "review">("view");
 
   const [nickname, setNickname] = useState("");
   const [lastNicknameChangedAt, setLastNicknameChangedAt] = useState<string | null>(null);
@@ -119,12 +152,7 @@ export function AppShell() {
     manner: 0,
     desc: 0,
   });
-  const [notif, setNotif] = useState<Record<NotifKey, boolean>>({
-    join: true,
-    full: true,
-    deadline: true,
-    chat: false,
-  });
+  const [notif, setNotif] = useState<NotifSettings>(DEFAULT_NOTIF_SETTINGS);
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
 
   /* ── Firebase 훅 ── */
@@ -220,7 +248,9 @@ export function AppShell() {
     const uid = auth.user?.uid;
     if (!uid || auth.user?.isAnonymous) return;
     void initNotifications(uid);
-    void loadNotifSettings(uid).then(setNotif);
+    void loadNotifSettings(uid)
+      .then(setNotif)
+      .catch(() => showToast("알림 설정을 불러오지 못했어요."));
   }, [auth.user?.uid, auth.user?.isAnonymous]);
 
   /* 포그라운드 알림 수신 → 알림 목록에 저장 */
@@ -364,12 +394,28 @@ export function AppShell() {
   );
 
   const myPageStats = useMemo(() => {
+    const receivedReviews = data.reviews.filter(
+      (r) => r.revieweeId === currentUser.id,
+    );
+    const reviewTags = REVIEW_TAG_DEFS.map((tagDef) => {
+      const count = receivedReviews.reduce((sum, review) => {
+        const hasTag = review.tags.some((tag) =>
+          tagDef.keys.some((key) => tag.includes(key)),
+        );
+        return sum + (hasTag ? 1 : 0);
+      }, 0);
+      return {
+        emoji: tagDef.emoji,
+        text: tagDef.text,
+        count,
+      };
+    }).filter((tag) => tag.count > 0);
+
     return {
       completedDealCount: completedDeals.length,
-      receivedReviewCount: data.reviews.filter(
-        (r) => r.revieweeId === currentUser.id,
-      ).length,
+      receivedReviewCount: receivedReviews.length,
       noshowCount: 0,
+      reviewTags,
     };
   }, [completedDeals.length, currentUser.id, data.reviews]);
 
@@ -449,6 +495,17 @@ export function AppShell() {
   function openRoom(id: string) {
     setSelectedId(id);
     setScreen("chat");
+  }
+
+  function openCompletedDeals(mode: "view" | "review") {
+    setCompletedDealsMode(mode);
+    setScreen("completedDeals");
+  }
+
+  function startReviewFromCompletedDeal(deal: Deal) {
+    setSelectedId(deal.id);
+    setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
+    setScreen("review");
   }
 
   /* 내 글 삭제(작성자 한정): 소프트 취소 + 내 채팅 목록에서 숨김 */
@@ -654,6 +711,23 @@ export function AppShell() {
     }
   }
 
+  function toggleNotif(key: NotifKey) {
+    setNotif((prev) => {
+      const next: NotifSettings = {
+        ...prev,
+        [key]: !prev[key],
+      };
+      const uid = auth.user?.uid;
+      if (uid && !auth.user?.isAnonymous) {
+        void saveNotifSettings(uid, next).catch(() => {
+          setNotif(prev);
+          showToast("알림 설정 저장에 실패했어요.");
+        });
+      }
+      return next;
+    });
+  }
+
   const showNav = (
     ["home", "map", "chatList", "chat", "mypage"] as Screen[]
   ).includes(screen);
@@ -833,27 +907,12 @@ export function AppShell() {
                 completedDealCount={myPageStats.completedDealCount}
                 receivedReviewCount={myPageStats.receivedReviewCount}
                 noshowCount={myPageStats.noshowCount}
+                reviewTags={myPageStats.reviewTags}
                 notif={notif}
-                onToggle={(key) => {
-                  setNotif((prev) => {
-                    const next = {
-                      ...prev,
-                      [key]: !prev[key],
-                    } as NotifSettings;
-                    const uid = auth.user?.uid;
-                    if (uid && !auth.user?.isAnonymous) {
-                      void saveNotifSettings(uid, next);
-                    }
-                    return next;
-                  });
-                }}
+                onToggle={toggleNotif}
                 onEditProfile={() => setScreen("profileEdit")}
-                onOpenCompletedDeals={() => setScreen("completedDeals")}
-                onReviewDemo={() => {
-                  if (deals.length > 0) setSelectedId(deals[0]!.id);
-                  setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
-                  setScreen("review");
-                }}
+                onOpenCompletedDeals={() => openCompletedDeals("view")}
+                onReviewDemo={() => openCompletedDeals("review")}
               />
             )}
 
@@ -875,7 +934,27 @@ export function AppShell() {
               <CompletedDealsScreen
                 deals={completedDeals}
                 meId={currentUser.id}
+                title={
+                  completedDealsMode === "review"
+                    ? "후기 작성할 거래"
+                    : "완료된 거래"
+                }
+                emptyTitle={
+                  completedDealsMode === "review"
+                    ? "후기 작성할 거래가 없어요"
+                    : "완료된 거래가 없어요"
+                }
+                emptyDesc={
+                  completedDealsMode === "review"
+                    ? "거래가 완료되면 후기 작성이 가능해요."
+                    : "거래가 완료되면 이곳에서 다시 확인할 수 있어요."
+                }
                 onBack={() => go("mypage", "mypage")}
+                onSelect={
+                  completedDealsMode === "review"
+                    ? startReviewFromCompletedDeal
+                    : undefined
+                }
               />
             )}
 

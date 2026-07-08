@@ -7,12 +7,19 @@ import { styles } from "../../../shared/ui/appStyles";
 import { tempRatio } from "../../gonggu/utils";
 import { NOTIF_ITEMS, type NotifKey } from "../../notifications/types";
 
+export type MyPageReviewTag = {
+  emoji: string;
+  text: string;
+  count: number;
+};
+
 export function MyPageScreen({
   nickname,
   locationLabel,
   completedDealCount,
   receivedReviewCount,
   noshowCount,
+  reviewTags,
   notif,
   onToggle,
   onEditProfile,
@@ -24,6 +31,7 @@ export function MyPageScreen({
   completedDealCount: number;
   receivedReviewCount: number;
   noshowCount: number;
+  reviewTags: MyPageReviewTag[];
   notif: Record<NotifKey, boolean>;
   onToggle: (key: NotifKey) => void;
   onEditProfile: () => void;
@@ -97,11 +105,22 @@ export function MyPageScreen({
       </View>
 
       <Text style={styles.mySection}>이웃이 남긴 후기</Text>
-      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-        <ReviewTag emoji="⏱️" text="시간 약속을 잘 지켜요" count={5} />
-        <ReviewTag emoji="⚖️" text="소분이 공정해요" count={4} />
-        <ReviewTag emoji="💬" text="친절하고 매너있어요" count={4} />
-      </View>
+      {reviewTags.length === 0 ? (
+        <Text style={{ fontSize: 13, color: t.muted }}>
+          아직 받은 후기 키워드가 없어요
+        </Text>
+      ) : (
+        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+          {reviewTags.map((tag) => (
+            <ReviewTag
+              key={tag.text}
+              emoji={tag.emoji}
+              text={tag.text}
+              count={tag.count}
+            />
+          ))}
+        </View>
+      )}
 
       <Text style={styles.mySection}>알림 설정</Text>
       <View style={styles.notifCard}>

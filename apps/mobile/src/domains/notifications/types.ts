@@ -14,7 +14,7 @@ export type NotifItem = {
 
 export const NOTIF_ITEMS: Array<{ key: NotifKey; label: string }> = [
   { key: "join", label: "새 참여자 발생" },
-  { key: "full", label: "모집 인원 달성" },
+  { key: "full", label: "모집 수량 달성" },
   { key: "deadline", label: "모집 마감 임박" },
   { key: "chat", label: "새 채팅 메시지" },
 ];
