@@ -206,7 +206,7 @@ export function CreateScreen({
           </Pressable>
 
           {/* 미니 맵 */}
-          <Pressable
+          {pickupPlace && <Pressable
             onPress={() => setShowPlaceSearch(true)}
             style={{
               height: 130,
@@ -238,7 +238,7 @@ export function CreateScreen({
                 <MapCenterPin />
               </View>
             </View>
-          </Pressable>
+          </Pressable>}
         </View>
 
         <View>
