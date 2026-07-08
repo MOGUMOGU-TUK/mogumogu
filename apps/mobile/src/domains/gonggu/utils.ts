@@ -12,6 +12,17 @@ const CATEGORY_TINTS: Record<string, string> = {
   기타: "#EEE0E5",
 };
 
+/** 모집 마감·픽업 일정 미입력 시 카드/상세에 쓰는 기본 라벨 */
+export const DEFAULT_RECRUITMENT_DEADLINE_LABEL = "픽업 일정 조율";
+
+export function formatRecruitmentDeadline(deadline: string): string {
+  const trimmed = deadline.trim();
+  if (!trimmed || trimmed === "미정") {
+    return DEFAULT_RECRUITMENT_DEADLINE_LABEL;
+  }
+  return deadline;
+}
+
 export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
   const gReviews = reviews.filter((r) => r.gongguId === g.id);
   return {
@@ -30,7 +41,7 @@ export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
     pickupLatitude: g.pickupLatitude,
     pickupLongitude: g.pickupLongitude,
     pickupNeighborhood: g.pickupNeighborhood,
-    deadline: g.recruitmentDeadline,
+    deadline: formatRecruitmentDeadline(g.recruitmentDeadline),
     urgent: /[12]시간|30분|마감/.test(g.recruitmentDeadline),
     spot: g.pickupPlaceName,
     pickup: g.pickupExpectedTime,

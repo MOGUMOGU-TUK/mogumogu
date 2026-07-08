@@ -63,7 +63,7 @@ import type { ReviewKey } from "../domains/review/types";
 import type { ChatMsg } from "../domains/chat/types";
 import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
-import { gongguToUi } from "../domains/gonggu/utils";
+import { DEFAULT_RECRUITMENT_DEADLINE_LABEL, gongguToUi } from "../domains/gonggu/utils";
 import { isWithinRadiusKm } from "../domains/location/services/geo";
 import type { User } from "../types/domain";
 import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
@@ -478,7 +478,7 @@ export function AppShell() {
       pickupPlaceName: cPickup || "장소 미정",
       pickupExpectedTime: cTime || "시간 미정",
       splitMethod: "수량 기준 비례 분담",
-      recruitmentDeadline: "미정",
+      recruitmentDeadline: DEFAULT_RECRUITMENT_DEADLINE_LABEL,
       ...(verifiedLocation
         ? {
           pickupLatitude: verifiedLocation.latitude,
