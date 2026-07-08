@@ -533,6 +533,21 @@ export function SendArrowIcon({
   );
 }
 
+export function MapCenterPin() {
+  return (
+    <View style={{ alignItems: "center" }}>
+      <View style={{
+        width: 22, height: 22, borderRadius: 11,
+        backgroundColor: t.rose, borderWidth: 3, borderColor: "#fff",
+        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25, shadowRadius: 4, elevation: 4,
+      }} />
+      <View style={{ width: 2, height: 14, backgroundColor: t.rose, marginTop: -1 }} />
+      <View style={{ width: 8, height: 4, borderRadius: 4, backgroundColor: "rgba(0,0,0,0.15)" }} />
+    </View>
+  );
+}
+
 export function LocationIcon({
   size = 22,
   color = t.ink,

@@ -1,11 +1,17 @@
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { WebView } from "react-native-webview";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { CREATE_CATS } from "../types";
 import { fmt } from "../utils";
 import { PlaceSearchSheet, type PickupPlace } from "./PlaceSearchSheet";
+import { MapCenterPin } from "../../../shared/ui/icons";
+import { buildMiniMapHtml } from "../../map/services/kakaoGeo";
+
+const KAKAO_JS_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY ?? "";
+const DEFAULT_CENTER = { lat: 37.4812, lng: 126.9527 };
 
 type CreateScreenProps = {
   cat: string;
@@ -46,6 +52,20 @@ export function CreateScreen({
 }: CreateScreenProps) {
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
   const [showPlaceSearch, setShowPlaceSearch] = useState(false);
+  const miniMapRef = useRef<WebView>(null);
+
+  const initialMapCenter = initialCenter ?? DEFAULT_CENTER;
+  const miniMapHtml = useMemo(
+    () => buildMiniMapHtml(initialMapCenter.lat, initialMapCenter.lng, true),
+    [initialMapCenter.lat, initialMapCenter.lng],
+  );
+
+  useEffect(() => {
+    if (!pickupPlace) return;
+    miniMapRef.current?.injectJavaScript(
+      `window.moveTo(${pickupPlace.latitude}, ${pickupPlace.longitude}); true;`
+    );
+  }, [pickupPlace]);
 
   return (
     <View style={styles.flex}>
@@ -183,6 +203,41 @@ export function CreateScreen({
                 {pickupPlace.address}
               </Text>
             )}
+          </Pressable>
+
+          {/* 미니 맵 */}
+          <Pressable
+            onPress={() => setShowPlaceSearch(true)}
+            style={{
+              height: 130,
+              borderRadius: 10,
+              overflow: "hidden",
+              marginTop: 8,
+              borderWidth: 1,
+              borderColor: t.border,
+            }}
+          >
+            {Platform.OS !== "web" && KAKAO_JS_KEY ? (
+              <WebView
+                ref={miniMapRef}
+                originWhitelist={["*"]}
+                source={{ html: miniMapHtml, baseUrl: "https://localhost" }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                scrollEnabled={false}
+                bounces={false}
+                overScrollMode="never"
+                setSupportMultipleWindows={false}
+              />
+            ) : (
+              <View style={{ flex: 1, backgroundColor: "#E8EDE6" }} />
+            )}
+            <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
+              <View style={{ marginBottom: 32 }}>
+                <MapCenterPin />
+              </View>
+            </View>
           </Pressable>
         </View>
 

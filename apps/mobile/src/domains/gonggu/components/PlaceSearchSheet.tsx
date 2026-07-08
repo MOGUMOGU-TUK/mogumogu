@@ -15,7 +15,7 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
-import { LocationIcon, MapPinIcon } from "../../../shared/ui/icons";
+import { LocationIcon, MapCenterPin, MapPinIcon } from "../../../shared/ui/icons";
 import { reverseGeocode } from "../../map/services/kakaoGeo";
 
 export type PickupPlace = {
@@ -229,10 +229,8 @@ export function PlaceSearchSheet({
             pointerEvents="none"
             style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}
           >
-            <View style={{ alignItems: "center", marginBottom: 32 }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: t.rose, borderWidth: 3, borderColor: "#fff", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 }} />
-              <View style={{ width: 2, height: 14, backgroundColor: t.rose, marginTop: -1 }} />
-              <View style={{ width: 8, height: 4, borderRadius: 4, backgroundColor: "rgba(0,0,0,0.15)" }} />
+            <View style={{ marginBottom: 32 }}>
+              <MapCenterPin />
             </View>
           </View>
 

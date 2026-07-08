@@ -1,7 +1,11 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo } from "react";
+import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { WebView } from "react-native-webview";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
+import { MapCenterPin } from "../../../shared/ui/icons";
+import { buildMiniMapHtml } from "../../map/services/kakaoGeo";
 import type { Deal } from "../types";
 import {
   barPct,
@@ -38,6 +42,11 @@ export function DetailScreen({
   onDelete,
   onCta,
 }: DetailScreenProps) {
+  const miniMapHtml = useMemo(() => {
+    if (deal.pickupLatitude == null || deal.pickupLongitude == null) return null;
+    return buildMiniMapHtml(deal.pickupLatitude, deal.pickupLongitude);
+  }, [deal.pickupLatitude, deal.pickupLongitude]);
+
   return (
     <View style={styles.flex}>
       <ScrollView contentContainerStyle={{ paddingBottom: 12 }} stickyHeaderIndices={[]}>
@@ -129,6 +138,32 @@ export function DetailScreen({
             <InfoRow label="픽업 장소" value={deal.spot} divider />
             <InfoRow label="픽업 시간" value={deal.pickup} />
           </View>
+
+          {miniMapHtml != null && Platform.OS !== "web" && (
+            <View style={{
+              height: 160,
+              borderRadius: 16,
+              overflow: "hidden",
+              marginTop: 11,
+            }}>
+              <WebView
+                originWhitelist={["*"]}
+                source={{ html: miniMapHtml, baseUrl: "https://localhost" }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                scrollEnabled={false}
+                bounces={false}
+                overScrollMode="never"
+                setSupportMultipleWindows={false}
+              />
+              <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
+                <View style={{ marginBottom: 32 }}>
+                  <MapCenterPin />
+                </View>
+              </View>
+            </View>
+          )}
 
           <Text style={styles.detailDesc}>{deal.desc}</Text>
 
