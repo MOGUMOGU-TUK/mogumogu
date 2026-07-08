@@ -97,7 +97,7 @@ export type NotifSettings = {
   chat: boolean;
 };
 
-const DEFAULT_SETTINGS: NotifSettings = {
+export const DEFAULT_NOTIF_SETTINGS: NotifSettings = {
   join: true,
   full: true,
   deadline: true,
@@ -146,12 +146,12 @@ async function saveFcmToken(uid: string, fcmToken: string): Promise<void> {
 
 export async function loadNotifSettings(uid: string): Promise<NotifSettings> {
   const services = getFirebaseServices();
-  if (!services) return DEFAULT_SETTINGS;
+  if (!services) return DEFAULT_NOTIF_SETTINGS;
 
   const snap = await getDoc(doc(services.db, "users", uid));
   const data = snap.data();
-  if (!data?.notifSettings) return DEFAULT_SETTINGS;
-  return { ...DEFAULT_SETTINGS, ...(data.notifSettings as Partial<NotifSettings>) };
+  if (!data?.notifSettings) return DEFAULT_NOTIF_SETTINGS;
+  return { ...DEFAULT_NOTIF_SETTINGS, ...(data.notifSettings as Partial<NotifSettings>) };
 }
 
 export async function saveNotifSettings(uid: string, settings: NotifSettings): Promise<void> {

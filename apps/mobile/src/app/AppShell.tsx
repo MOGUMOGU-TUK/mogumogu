@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -30,6 +31,7 @@ import {
   hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
 import {
+  DEFAULT_NOTIF_SETTINGS,
   clearNotifsDoc,
   initNotifications,
   loadNotifSettings,
@@ -55,7 +57,17 @@ import { VerifyScreen } from "../domains/location/components/VerifyScreen";
 import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";
 import { MapScreen } from "../domains/map/components/MapScreen";
-import { MyPageScreen } from "../domains/mypage/components/MyPageScreen";
+import { CompletedDealsScreen } from "../domains/mypage/components/CompletedDealsScreen";
+import {
+  MyPageScreen,
+  type MyPageReviewTag,
+} from "../domains/mypage/components/MyPageScreen";
+import { ProfileEditScreen } from "../domains/mypage/components/ProfileEditScreen";
+import {
+  loadUserProfileDoc,
+  saveUserProfileDoc,
+  type UserProfileDoc,
+} from "../domains/mypage/services/profileRepository";
 import { NotifScreen } from "../domains/notifications/components/NotifScreen";
 import type { NotifItem, NotifKey } from "../domains/notifications/types";
 import { ReviewScreen } from "../domains/review/components/ReviewScreen";
@@ -70,6 +82,57 @@ import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { t } from "../shared/theme/theme";
 import { styles } from "../shared/ui/appStyles";
+
+const NICKNAME_CHANGE_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+const profileStorageKey = (uid: string) => `mogumogu.profile.${uid}`;
+const REVIEW_TAG_DEFS: Array<
+  MyPageReviewTag & { keys: string[] }
+> = [
+  {
+    emoji: "⏱️",
+    text: "시간 약속을 잘 지켜요",
+    count: 0,
+    keys: ["time", "시간 약속", "시간"],
+  },
+  {
+    emoji: "⚖️",
+    text: "소분이 공정해요",
+    count: 0,
+    keys: ["fair", "소분", "공정"],
+  },
+  {
+    emoji: "💬",
+    text: "친절하고 매너있어요",
+    count: 0,
+    keys: ["manner", "communication", "소통 매너", "친절", "매너"],
+  },
+  {
+    emoji: "🧺",
+    text: "상품 설명이 정확해요",
+    count: 0,
+    keys: ["desc", "description", "상품 설명", "설명"],
+  },
+];
+
+function formatDateLabel(date: Date) {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
+
+function applyProfileDoc(
+  profile: UserProfileDoc | null | undefined,
+  setNickname: (nickname: string) => void,
+  setLastNicknameChangedAt: (changedAt: string | null) => void,
+  setVerifiedLocation: (location: VerifiedLocation | null) => void,
+) {
+  if (!profile) return;
+  if (profile.nickname?.trim()) {
+    setNickname(profile.nickname.trim());
+  }
+  setLastNicknameChangedAt(profile.lastNicknameChangedAt ?? null);
+  if (profile.verifiedLocation?.neighborhood) {
+    setVerifiedLocation(profile.verifiedLocation);
+  }
+}
 
 /**
  * App composition root.
@@ -90,8 +153,10 @@ export function AppShell() {
   const [showJoin, setShowJoin] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState("");
+  const [completedDealsMode, setCompletedDealsMode] = useState<"view" | "review">("view");
 
   const [nickname, setNickname] = useState("");
+  const [lastNicknameChangedAt, setLastNicknameChangedAt] = useState<string | null>(null);
   const [verifyStep, setVerifyStep] = useState(0);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -112,18 +177,57 @@ export function AppShell() {
     manner: 0,
     desc: 0,
   });
-  const [notif, setNotif] = useState<Record<NotifKey, boolean>>({
-    join: true,
-    full: true,
-    deadline: true,
-    chat: false,
-  });
+  const [notif, setNotif] = useState<NotifSettings>(DEFAULT_NOTIF_SETTINGS);
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
   const [dismissedReviewIds, setDismissedReviewIds] = useState<string[]>([]);
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
   const data = useFirestoreData(auth.user?.uid ?? null);
+
+  useEffect(() => {
+    const uid = auth.user?.uid;
+    if (!uid) {
+      setLastNicknameChangedAt(null);
+      return;
+    }
+
+    void Promise.all([
+      loadUserProfileDoc(uid).catch(() => null),
+      AsyncStorage.getItem(profileStorageKey(uid)).catch(() => null),
+    ])
+      .then(([remoteProfile, rawLocalProfile]) => {
+        if (remoteProfile) {
+          applyProfileDoc(
+            remoteProfile,
+            setNickname,
+            setLastNicknameChangedAt,
+            setVerifiedLocation,
+          );
+          return;
+        }
+
+        if (!rawLocalProfile) {
+          setLastNicknameChangedAt(null);
+          return;
+        }
+
+        const localProfile = JSON.parse(rawLocalProfile) as UserProfileDoc;
+        applyProfileDoc(
+          localProfile,
+          setNickname,
+          setLastNicknameChangedAt,
+          setVerifiedLocation,
+        );
+
+        if (localProfile.nickname || localProfile.verifiedLocation) {
+          void saveUserProfileDoc(uid, localProfile);
+        }
+      })
+      .catch(() => {
+        setLastNicknameChangedAt(null);
+      });
+  }, [auth.user?.uid]);
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
@@ -152,22 +256,24 @@ export function AppShell() {
     );
   }, [feedDeals, verifiedLocation]);
 
-  /* 피드 기준 selectedId / mapSel 보정 */
+  /* selectedId는 완료/후기 화면에서도 쓰이므로 전체 거래 기준으로 보정한다. */
   useEffect(() => {
-    if (feedDeals.length === 0) {
+    if (deals.length === 0) {
       if (selectedId) setSelectedId("");
+    } else if (!selectedId || !deals.some((d) => d.id === selectedId)) {
+      setSelectedId((feedDeals[0] ?? deals[0])!.id);
+    }
+
+    if (feedDeals.length === 0) {
       if (mapSel) setMapSel("");
       return;
     }
 
     const fallbackId = feedDeals[0]!.id;
-    if (!selectedId || !feedDeals.some((d) => d.id === selectedId)) {
-      setSelectedId(fallbackId);
-    }
     if (!mapSel || !feedDeals.some((d) => d.id === mapSel)) {
       setMapSel(fallbackId);
     }
-  }, [feedDeals, selectedId, mapSel]);
+  }, [deals, feedDeals, selectedId, mapSel]);
 
   /* Google 등 소셜 로그인 성공 시 카카오와 동일하게 닉네임·동네 인증으로 이동 */
   useEffect(() => {
@@ -187,7 +293,9 @@ export function AppShell() {
     const uid = auth.user?.uid;
     if (!uid || auth.user?.isAnonymous) return;
     void initNotifications(uid);
-    void loadNotifSettings(uid).then(setNotif);
+    void loadNotifSettings(uid)
+      .then(setNotif)
+      .catch(() => showToast("알림 설정을 불러오지 못했어요."));
   }, [auth.user?.uid, auth.user?.isAnonymous]);
 
   /* 인앱 알림 — Firestore 실시간 구독 */
@@ -210,6 +318,23 @@ export function AppShell() {
     }),
     [auth.user, nickname, verifiedLocation]
   );
+
+  const nicknameChangeState = useMemo(() => {
+    if (!lastNicknameChangedAt) {
+      return { canChange: true, nextDate: null };
+    }
+
+    const lastChangedTime = new Date(lastNicknameChangedAt).getTime();
+    if (Number.isNaN(lastChangedTime)) {
+      return { canChange: true, nextDate: null };
+    }
+
+    const nextTime = lastChangedTime + NICKNAME_CHANGE_INTERVAL_MS;
+    return {
+      canChange: Date.now() >= nextTime,
+      nextDate: formatDateLabel(new Date(nextTime)),
+    };
+  }, [lastNicknameChangedAt]);
 
   /* 채팅 실시간 구독 */
   const liveMessages = useChatMessages(selectedId);
@@ -265,6 +390,60 @@ export function AppShell() {
     [deals, data.participations, currentUser.id],
   );
 
+  const completedDeals = useMemo(
+    () =>
+      deals.filter((d) => {
+        const isHost = d.hostId === currentUser.id;
+        const isPart = data.participations.some(
+          (p) => p.gongguId === d.id && p.userId === currentUser.id,
+        );
+        return ["review_required", "completed"].includes(d.status) && (isHost || isPart);
+      }),
+    [deals, data.participations, currentUser.id],
+  );
+
+  const reviewableDeals = useMemo(
+    () =>
+      deals.filter((d) => {
+        if (d.status !== "review_required" || d.hostId === currentUser.id) {
+          return false;
+        }
+
+        const participation = data.participations.find(
+          (p) => p.gongguId === d.id && p.userId === currentUser.id,
+        );
+
+        return Boolean(participation && participation.reviewStatus !== "completed");
+      }),
+    [deals, data.participations, currentUser.id],
+  );
+
+  const myPageStats = useMemo(() => {
+    const receivedReviews = data.reviews.filter(
+      (r) => r.revieweeId === currentUser.id,
+    );
+    const reviewTags = REVIEW_TAG_DEFS.map((tagDef) => {
+      const count = receivedReviews.reduce((sum, review) => {
+        const hasTag = review.tags.some((tag) =>
+          tagDef.keys.some((key) => tag.includes(key)),
+        );
+        return sum + (hasTag ? 1 : 0);
+      }, 0);
+      return {
+        emoji: tagDef.emoji,
+        text: tagDef.text,
+        count,
+      };
+    }).filter((tag) => tag.count > 0);
+
+    return {
+      completedDealCount: completedDeals.length,
+      receivedReviewCount: receivedReviews.length,
+      noshowCount: 0,
+      reviewTags,
+    };
+  }, [completedDeals.length, currentUser.id, data.reviews]);
+
   useEffect(() => {
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -309,6 +488,14 @@ export function AppShell() {
         go("home", "home");
         return true;
       }
+      if (screen === "completedDeals") {
+        go("mypage", "mypage");
+        return true;
+      }
+      if (screen === "profileEdit") {
+        go("mypage", "mypage");
+        return true;
+      }
       if (screen === "map" || screen === "mypage") {
         go("home", "home");
         return true;
@@ -333,6 +520,17 @@ export function AppShell() {
   function openRoom(id: string) {
     setSelectedId(id);
     setScreen("chat");
+  }
+
+  function openCompletedDeals(mode: "view" | "review") {
+    setCompletedDealsMode(mode);
+    setScreen("completedDeals");
+  }
+
+  function startReviewFromCompletedDeal(deal: Deal) {
+    setSelectedId(deal.id);
+    setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
+    setScreen("review");
   }
 
   /* 내 글 삭제(작성자 한정): 소프트 취소 + 내 채팅 목록에서 숨김 */
@@ -529,6 +727,92 @@ export function AppShell() {
     showToast("후기가 등록됐어요. 고마워요!");
   }
 
+  async function saveProfileNickname(nextNickname: string) {
+    const trimmed = nextNickname.trim();
+    if (!trimmed) return;
+
+    const nicknameChanged = trimmed !== currentUser.nickname.trim();
+    if (nicknameChanged && !nicknameChangeState.canChange) {
+      showToast("닉네임은 30일에 한 번만 바꿀 수 있어요.");
+      return;
+    }
+
+    const changedAt = nicknameChanged
+      ? new Date().toISOString()
+      : lastNicknameChangedAt;
+    setNickname(trimmed);
+    setLastNicknameChangedAt(changedAt);
+
+    const uid = auth.user?.uid;
+    const profile: UserProfileDoc = {
+      nickname: trimmed,
+      lastNicknameChangedAt: changedAt,
+      verifiedLocation,
+    };
+
+    if (uid) {
+      try {
+        await saveUserProfileDoc(uid, profile);
+        await AsyncStorage.setItem(
+          profileStorageKey(uid),
+          JSON.stringify(profile),
+        );
+      } catch {
+        showToast("프로필 저장에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
+    }
+
+    go("mypage", "mypage");
+    showToast("프로필을 저장했어요");
+  }
+
+  async function findNeighborhoodFromProfile() {
+    setLocating(true);
+    setLocateError(null);
+    try {
+      const location = await verifyNeighborhood();
+      setVerifiedLocation(location);
+      const uid = auth.user?.uid;
+      if (uid) {
+        const profile: UserProfileDoc = {
+          nickname: currentUser.nickname,
+          lastNicknameChangedAt,
+          verifiedLocation: location,
+        };
+        try {
+          await saveUserProfileDoc(uid, profile);
+          await AsyncStorage.setItem(profileStorageKey(uid), JSON.stringify(profile));
+        } catch {
+          showToast("동네 저장에 실패했어요. 다시 시도해주세요.");
+          return;
+        }
+      }
+      showToast("동네를 다시 확인했어요");
+    } catch (error: unknown) {
+      setLocateError(mapLocationError(error));
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  function toggleNotif(key: NotifKey) {
+    setNotif((prev) => {
+      const next: NotifSettings = {
+        ...prev,
+        [key]: !prev[key],
+      };
+      const uid = auth.user?.uid;
+      if (uid && !auth.user?.isAnonymous) {
+        void saveNotifSettings(uid, next).catch(() => {
+          setNotif(prev);
+          showToast("알림 설정 저장에 실패했어요.");
+        });
+      }
+      return next;
+    });
+  }
+
   const showNav = (
     ["home", "map", "chatList", "chat", "mypage"] as Screen[]
   ).includes(screen);
@@ -707,25 +991,61 @@ export function AppShell() {
               <MyPageScreen
                 nickname={currentUser.nickname}
                 locationLabel={verifiedLocationLabel}
+                completedDealCount={myPageStats.completedDealCount}
+                receivedReviewCount={myPageStats.receivedReviewCount}
+                noshowCount={myPageStats.noshowCount}
+                reviewTags={myPageStats.reviewTags}
                 notif={notif}
-                onToggle={(key) => {
-                  setNotif((prev) => {
-                    const next = {
-                      ...prev,
-                      [key]: !prev[key],
-                    } as NotifSettings;
-                    const uid = auth.user?.uid;
-                    if (uid && !auth.user?.isAnonymous) {
-                      void saveNotifSettings(uid, next);
-                    }
-                    return next;
-                  });
-                }}
-                onReviewDemo={() => {
-                  if (deals.length > 0) setSelectedId(deals[0]!.id);
-                  setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
-                  setScreen("review");
-                }}
+                onToggle={toggleNotif}
+                onEditProfile={() => setScreen("profileEdit")}
+                onOpenCompletedDeals={() => openCompletedDeals("view")}
+                onReviewDemo={() => openCompletedDeals("review")}
+              />
+            )}
+
+            {screen === "profileEdit" && (
+              <ProfileEditScreen
+                nickname={currentUser.nickname}
+                locationLabel={verifiedLocationLabel}
+                canChangeNickname={nicknameChangeState.canChange}
+                nextNicknameChangeDate={nicknameChangeState.nextDate}
+                locationLoading={locating}
+                locationError={locateError}
+                onBack={() => go("mypage", "mypage")}
+                onSave={(nextNickname) => void saveProfileNickname(nextNickname)}
+                onFindNeighborhood={() => void findNeighborhoodFromProfile()}
+              />
+            )}
+
+            {screen === "completedDeals" && (
+              <CompletedDealsScreen
+                deals={
+                  completedDealsMode === "review"
+                    ? reviewableDeals
+                    : completedDeals
+                }
+                meId={currentUser.id}
+                title={
+                  completedDealsMode === "review"
+                    ? "후기 작성할 거래"
+                    : "완료된 거래"
+                }
+                emptyTitle={
+                  completedDealsMode === "review"
+                    ? "후기 작성할 거래가 없어요"
+                    : "완료된 거래가 없어요"
+                }
+                emptyDesc={
+                  completedDealsMode === "review"
+                    ? "거래가 완료되면 후기 작성이 가능해요."
+                    : "거래가 완료되면 이곳에서 다시 확인할 수 있어요."
+                }
+                onBack={() => go("mypage", "mypage")}
+                onSelect={
+                  completedDealsMode === "review"
+                    ? startReviewFromCompletedDeal
+                    : undefined
+                }
               />
             )}
 

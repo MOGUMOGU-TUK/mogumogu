@@ -9,6 +9,8 @@ export type Screen =
   | "create"
   | "review"
   | "mypage"
+  | "profileEdit"
+  | "completedDeals"
   | "notifications";
 
 export type MainTab = "home" | "map" | "chat" | "mypage";

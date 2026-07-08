@@ -7,17 +7,35 @@ import { styles } from "../../../shared/ui/appStyles";
 import { tempRatio } from "../../gonggu/utils";
 import { NOTIF_ITEMS, type NotifKey } from "../../notifications/types";
 
+export type MyPageReviewTag = {
+  emoji: string;
+  text: string;
+  count: number;
+};
+
 export function MyPageScreen({
   nickname,
   locationLabel,
+  completedDealCount,
+  receivedReviewCount,
+  noshowCount,
+  reviewTags,
   notif,
   onToggle,
+  onEditProfile,
+  onOpenCompletedDeals,
   onReviewDemo,
 }: {
   nickname: string;
   locationLabel: string;
+  completedDealCount: number;
+  receivedReviewCount: number;
+  noshowCount: number;
+  reviewTags: MyPageReviewTag[];
   notif: Record<NotifKey, boolean>;
   onToggle: (key: NotifKey) => void;
+  onEditProfile: () => void;
+  onOpenCompletedDeals: () => void;
   onReviewDemo: () => void;
 }) {
   return (
@@ -53,7 +71,7 @@ export function MyPageScreen({
             </View>
             <Text style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>{locationLabel}</Text>
           </View>
-          <Pressable style={styles.editButton}>
+          <Pressable style={styles.editButton} onPress={onEditProfile}>
             <Text style={{ fontSize: 12, fontWeight: "600", color: t.chipInk }}>
               편집
             </Text>
@@ -77,17 +95,32 @@ export function MyPageScreen({
       </View>
 
       <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-        <StatCard value="8" label="거래 완료" />
-        <StatCard value="6" label="받은 후기" />
-        <StatCard value="0" label="노쇼" valueColor={t.greenInk} />
+        <StatCard
+          value={String(completedDealCount)}
+          label="거래 완료"
+          onPress={onOpenCompletedDeals}
+        />
+        <StatCard value={String(receivedReviewCount)} label="받은 후기" />
+        <StatCard value={String(noshowCount)} label="노쇼" valueColor={t.greenInk} />
       </View>
 
       <Text style={styles.mySection}>이웃이 남긴 후기</Text>
-      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-        <ReviewTag emoji="⏱️" text="시간 약속을 잘 지켜요" count={5} />
-        <ReviewTag emoji="⚖️" text="소분이 공정해요" count={4} />
-        <ReviewTag emoji="💬" text="친절하고 매너있어요" count={4} />
-      </View>
+      {reviewTags.length === 0 ? (
+        <Text style={{ fontSize: 13, color: t.muted }}>
+          아직 받은 후기 키워드가 없어요
+        </Text>
+      ) : (
+        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+          {reviewTags.map((tag) => (
+            <ReviewTag
+              key={tag.text}
+              emoji={tag.emoji}
+              text={tag.text}
+              count={tag.count}
+            />
+          ))}
+        </View>
+      )}
 
       <Text style={styles.mySection}>알림 설정</Text>
       <View style={styles.notifCard}>
@@ -121,13 +154,16 @@ function StatCard({
   value,
   label,
   valueColor,
+  onPress,
 }: {
   value: string;
   label: string;
   valueColor?: string;
+  onPress?: () => void;
 }) {
+  const Wrapper = onPress ? Pressable : View;
   return (
-    <View style={styles.statCard}>
+    <Wrapper style={styles.statCard} onPress={onPress}>
       <Text
         style={{ fontSize: 20, fontWeight: "800", color: valueColor ?? t.ink }}
       >
@@ -136,7 +172,7 @@ function StatCard({
       <Text style={{ fontSize: 12, color: t.muted, marginTop: 2 }}>
         {label}
       </Text>
-    </View>
+    </Wrapper>
   );
 }
 
