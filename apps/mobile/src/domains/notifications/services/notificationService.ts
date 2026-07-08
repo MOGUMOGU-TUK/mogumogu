@@ -1,8 +1,94 @@
 import * as Notifications from "expo-notifications";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
 import { Platform } from "react-native";
 
 import { getFirebaseServices } from "../../../services/firebase/client";
+
+type NotifItemShape = {
+  id: string;
+  title: string;
+  body: string;
+  gongguId?: string;
+  type?: string;
+  receivedAt: string;
+  read: boolean;
+};
+
+const NOTIFICATIONS = "notifications";
+const ITEMS = "items";
+
+export async function writeNotifDoc(
+  userId: string,
+  notif: { type: string; title: string; body: string; gongguId?: string }
+): Promise<void> {
+  const services = getFirebaseServices();
+  if (!services) return;
+  try {
+    await addDoc(collection(services.db, NOTIFICATIONS, userId, ITEMS), {
+      ...notif,
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+  } catch {
+    // best-effort; Cloud Functions 없는 환경에서 권한 오류 등 무시
+  }
+}
+
+export function subscribeNotifs(
+  userId: string,
+  onChange: (items: NotifItemShape[]) => void
+): () => void {
+  const services = getFirebaseServices();
+  if (!services) return () => {};
+  const q = query(
+    collection(services.db, NOTIFICATIONS, userId, ITEMS),
+    orderBy("createdAt", "desc")
+  );
+  return onSnapshot(
+    q,
+    (snap) =>
+      onChange(
+        snap.docs.map((d) => ({
+          id: d.id,
+          title: String(d.data().title ?? ""),
+          body: String(d.data().body ?? ""),
+          gongguId: d.data().gongguId as string | undefined,
+          type: d.data().type as string | undefined,
+          receivedAt: String(d.data().createdAt ?? new Date().toISOString()),
+          read: Boolean(d.data().read),
+        }))
+      ),
+    () => {} // 권한 오류 등은 조용히 무시 (AppShell이 uid 변경 시 재구독)
+  );
+}
+
+export async function markNotifReadDoc(userId: string, notifId: string): Promise<void> {
+  const services = getFirebaseServices();
+  if (!services) return;
+  await updateDoc(doc(services.db, NOTIFICATIONS, userId, ITEMS, notifId), { read: true });
+}
+
+export async function clearNotifsDoc(userId: string): Promise<void> {
+  const services = getFirebaseServices();
+  if (!services) return;
+  const snap = await getDocs(collection(services.db, NOTIFICATIONS, userId, ITEMS));
+  if (snap.empty) return;
+  const batch = writeBatch(services.db);
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+}
 
 export type NotifSettings = {
   join: boolean;
@@ -17,15 +103,6 @@ const DEFAULT_SETTINGS: NotifSettings = {
   deadline: true,
   chat: false
 };
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false
-  })
-});
 
 /**
  * 알림 권한 요청 + FCM 디바이스 토큰 취득 후 Firestore에 저장.

@@ -1,4 +1,3 @@
-import * as Notifications from "expo-notifications";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -30,9 +29,12 @@ import {
   hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
 import {
+  clearNotifsDoc,
   initNotifications,
   loadNotifSettings,
+  markNotifReadDoc,
   saveNotifSettings,
+  subscribeNotifs,
   type NotifSettings,
 } from "../domains/notifications/services/notificationService";
 import {
@@ -185,67 +187,12 @@ export function AppShell() {
     void loadNotifSettings(uid).then(setNotif);
   }, [auth.user?.uid, auth.user?.isAnonymous]);
 
-  /* 포그라운드 알림 수신 → 알림 목록에 저장 */
+  /* 인앱 알림 — Firestore 실시간 구독 */
   useEffect(() => {
-    const sub = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        const { title, body, data } = notification.request.content;
-        const payload = data as { gongguId?: string; type?: string };
-        setNotifItems((prev) => [
-          {
-            id: notification.request.identifier,
-            title: title ?? "모구모구",
-            body: body ?? "",
-            gongguId: payload?.gongguId,
-            type: payload?.type,
-            receivedAt: new Date().toISOString(),
-            read: false,
-          },
-          ...prev,
-        ]);
-      },
-    );
-    return () => sub.remove();
-  }, []);
-
-  /* 알림 탭 시 해당 화면으로 이동 */
-  useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const { title, body, data } = response.notification.request.content;
-        const payload = data as { gongguId?: string; type?: string };
-        /* 알림 목록에 추가 (중복 방지) */
-        const id = response.notification.request.identifier;
-        setNotifItems((prev) => {
-          if (prev.some((n) => n.id === id)) return prev;
-          return [
-            {
-              id,
-              title: title ?? "모구모구",
-              body: body ?? "",
-              gongguId: payload?.gongguId,
-              type: payload?.type,
-              receivedAt: new Date().toISOString(),
-              read: true,
-            },
-            ...prev,
-          ];
-        });
-        if (payload?.gongguId) {
-          setSelectedId(payload.gongguId);
-          setShowJoin(false);
-          if (payload.type === "chat") {
-            setTab("chat");
-            setScreen("chat");
-          } else {
-            setTab("home");
-            setScreen("detail");
-          }
-        }
-      },
-    );
-    return () => sub.remove();
-  }, []);
+    const uid = auth.user?.uid;
+    if (!uid || auth.user?.isAnonymous) return;
+    return subscribeNotifs(uid, setNotifItems);
+  }, [auth.user?.uid, auth.user?.isAnonymous]);
 
   /* 현재 사용자 (도메인 타입) */
   const currentUser = useMemo<User>(
@@ -728,16 +675,16 @@ export function AppShell() {
                 deals={deals}
                 onBack={() => go("home", "home")}
                 onOpen={(gongguId, notifId) => {
-                  setNotifItems((prev) =>
-                    prev.map((n) =>
-                      n.id === notifId ? { ...n, read: true } : n,
-                    ),
-                  );
+                  const uid = auth.user?.uid;
+                  if (uid) void markNotifReadDoc(uid, notifId);
                   setDetailFrom("notifications");
                   setSelectedId(gongguId);
                   setScreen("detail");
                 }}
-                onClear={() => setNotifItems([])}
+                onClear={() => {
+                  const uid = auth.user?.uid;
+                  if (uid) void clearNotifsDoc(uid);
+                }}
               />
             )}
           </View>

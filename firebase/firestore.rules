@@ -78,6 +78,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /notifications/{userId} {
+      match /items/{itemId} {
+        allow read, update, delete: if isOwner(userId);
+        allow create: if signedIn();
+      }
+    }
+
     match /reports/{reportId} {
       allow create: if signedIn();
       allow read, update, delete: if false;
