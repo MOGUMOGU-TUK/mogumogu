@@ -32,7 +32,9 @@ export function ChatListScreen({
       ) : (
         <ScrollView contentContainerStyle={styles.roomList}>
           {rooms.map((room) => {
-            const ended = room.status === "canceled";
+            const ended = ["review_required", "completed", "canceled"].includes(
+              room.status,
+            );
             const isHost = room.hostId === meId;
             return (
               <View key={room.id} style={styles.roomRow}>

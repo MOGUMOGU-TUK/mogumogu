@@ -28,6 +28,7 @@ import {
   cancelGongguDoc,
   completeGongguDoc,
   createGongguDoc,
+  hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
 import {
   DEFAULT_NOTIF_SETTINGS,
@@ -559,10 +560,15 @@ export function AppShell() {
   /* 채팅방 나가기: 방장이 나가면 공구 자체가 삭제(취소)되고, 참여자는 참여만 취소 */
   function leaveRoom(deal: Deal) {
     const isHost = deal.hostId === currentUser.id;
+    const alreadyEnded = ["review_required", "completed", "canceled"].includes(
+      deal.status,
+    );
     setConfirm({
       title: "채팅방을 나갈까요?",
       message: isHost
-        ? "공구가 삭제되고 채팅방이 종료돼요. 되돌릴 수 없어요."
+        ? alreadyEnded
+          ? "내 채팅 목록에서 이 방이 사라져요."
+          : "공구가 삭제되고 채팅방이 종료돼요. 되돌릴 수 없어요."
         : "참여가 취소되고 채팅방에서 나가게 돼요.",
       confirmLabel: "나가기",
       danger: true,
@@ -571,7 +577,11 @@ export function AppShell() {
         if (isFirebaseConfigured()) {
           try {
             if (isHost) {
-              await cancelGongguDoc(deal.id, { hideForHost: true });
+              if (alreadyEnded) {
+                await hideGongguChatDoc(deal.id);
+              } else {
+                await cancelGongguDoc(deal.id, { hideForHost: true });
+              }
             } else {
               await cancelParticipationDoc(deal.id, currentUser);
             }
@@ -582,7 +592,9 @@ export function AppShell() {
         }
         setJoined((prev) => prev.filter((x) => x !== deal.id));
         go("chatList", "chat");
-        showToast(isHost ? "공구를 삭제했어요" : "채팅방에서 나갔어요");
+        showToast(
+          isHost && !alreadyEnded ? "공구를 삭제했어요" : "채팅방에서 나갔어요",
+        );
       },
     });
   }
