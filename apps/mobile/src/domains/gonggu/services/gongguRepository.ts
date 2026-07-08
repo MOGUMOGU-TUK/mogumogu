@@ -228,16 +228,3 @@ export async function completeGongguDoc(gongguId: string): Promise<void> {
   });
   await batch.commit();
 }
-
-/**
- * 방장이 이미 종료된 공구의 채팅방에서 "나가기"를 누른 경우: 본인 채팅 목록에서만 숨긴다.
- */
-export async function hideGongguChatDoc(gongguId: string): Promise<void> {
-  const services = getFirebaseServices();
-  if (!services) {
-    throw new Error("Firebase가 설정되지 않았습니다.");
-  }
-  const { db } = services;
-
-  await updateDoc(doc(db, GONGGUS, gongguId), { hostHidden: true });
-}

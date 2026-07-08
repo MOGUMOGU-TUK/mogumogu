@@ -28,7 +28,6 @@ import {
   cancelGongguDoc,
   completeGongguDoc,
   createGongguDoc,
-  hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
 import {
   DEFAULT_NOTIF_SETTINGS,
@@ -382,10 +381,10 @@ export function AppShell() {
     () =>
       deals.filter((d) => {
         const isHost = d.hostId === currentUser.id;
-        const isPart = data.participations.some(
+        if (isHost) return !d.hostHidden;
+        return data.participations.some(
           (p) => p.gongguId === d.id && p.userId === currentUser.id,
         );
-        return (isHost && !d.hostHidden) || isPart;
       }),
     [deals, data.participations, currentUser.id],
   );
@@ -557,13 +556,13 @@ export function AppShell() {
     });
   }
 
-  /* 채팅방 나가기: 방장은 목록에서 숨김, 참여자는 참여 취소 */
+  /* 채팅방 나가기: 방장이 나가면 공구 자체가 삭제(취소)되고, 참여자는 참여만 취소 */
   function leaveRoom(deal: Deal) {
     const isHost = deal.hostId === currentUser.id;
     setConfirm({
       title: "채팅방을 나갈까요?",
       message: isHost
-        ? "내 채팅 목록에서 이 방이 사라져요."
+        ? "공구가 삭제되고 채팅방이 종료돼요. 되돌릴 수 없어요."
         : "참여가 취소되고 채팅방에서 나가게 돼요.",
       confirmLabel: "나가기",
       danger: true,
@@ -572,7 +571,7 @@ export function AppShell() {
         if (isFirebaseConfigured()) {
           try {
             if (isHost) {
-              await hideGongguChatDoc(deal.id);
+              await cancelGongguDoc(deal.id, { hideForHost: true });
             } else {
               await cancelParticipationDoc(deal.id, currentUser);
             }
@@ -583,7 +582,7 @@ export function AppShell() {
         }
         setJoined((prev) => prev.filter((x) => x !== deal.id));
         go("chatList", "chat");
-        showToast("채팅방에서 나갔어요");
+        showToast(isHost ? "공구를 삭제했어요" : "채팅방에서 나갔어요");
       },
     });
   }
@@ -945,6 +944,7 @@ export function AppShell() {
                   onSend={sendMessage}
                   onLeave={() => leaveRoom(sel)}
                   onComplete={() => completeGonggu(sel)}
+                  onOpenDetail={() => openDeal(sel.id)}
                 />
               ) : (
                 <EmptyState
