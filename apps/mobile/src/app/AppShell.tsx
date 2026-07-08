@@ -132,7 +132,7 @@ export function AppShell() {
   );
 
   const feedDeals = useMemo(
-    () => deals.filter((d) => d.status !== "canceled"),
+    () => deals.filter((d) => !["canceled", "review_required", "completed"].includes(d.status)),
     [deals],
   );
 
