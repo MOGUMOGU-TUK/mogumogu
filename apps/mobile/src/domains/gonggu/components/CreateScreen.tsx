@@ -1,9 +1,17 @@
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { WebView } from "react-native-webview";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { CREATE_CATS } from "../types";
 import { fmt } from "../utils";
+import { PlaceSearchSheet, type PickupPlace } from "./PlaceSearchSheet";
+import { MapCenterPin } from "../../../shared/ui/icons";
+import { buildMiniMapHtml } from "../../map/services/kakaoGeo";
+
+const KAKAO_JS_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY ?? "";
+const DEFAULT_CENTER = { lat: 37.4812, lng: 126.9527 };
 
 type CreateScreenProps = {
   cat: string;
@@ -12,12 +20,14 @@ type CreateScreenProps = {
   onTitle: (v: string) => void;
   total: string;
   qty: string;
-  pickup: string;
   time: string;
   onTotal: (v: string) => void;
   onQty: (v: string) => void;
-  onPickup: (v: string) => void;
   onTime: (v: string) => void;
+  pickupPlace: PickupPlace | null;
+  onPickupPlace: (place: PickupPlace) => void;
+  initialCenter?: { lat: number; lng: number };
+  locationAvailable: boolean;
   onBack: () => void;
   onPost: () => void | Promise<void>;
 };
@@ -29,16 +39,33 @@ export function CreateScreen({
   onTitle,
   total,
   qty,
-  pickup,
   time,
   onTotal,
   onQty,
-  onPickup,
   onTime,
+  pickupPlace,
+  onPickupPlace,
+  initialCenter,
+  locationAvailable,
   onBack,
   onPost,
 }: CreateScreenProps) {
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
+  const [showPlaceSearch, setShowPlaceSearch] = useState(false);
+  const miniMapRef = useRef<WebView>(null);
+
+  const initialMapCenter = initialCenter ?? DEFAULT_CENTER;
+  const miniMapHtml = useMemo(
+    () => buildMiniMapHtml(initialMapCenter.lat, initialMapCenter.lng, true),
+    [initialMapCenter.lat, initialMapCenter.lng],
+  );
+
+  useEffect(() => {
+    if (!pickupPlace) return;
+    miniMapRef.current?.injectJavaScript(
+      `window.moveTo(${pickupPlace.latitude}, ${pickupPlace.longitude}); true;`
+    );
+  }, [pickupPlace]);
 
   return (
     <View style={styles.flex}>
@@ -76,14 +103,7 @@ export function CreateScreen({
 
         <View>
           <Text style={styles.fieldLabel}>카테고리</Text>
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 8,
-              marginTop: 9,
-              flexWrap: "wrap",
-            }}
-          >
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
             {CREATE_CATS.map((label) => {
               const active = label === cat;
               return (
@@ -149,27 +169,87 @@ export function CreateScreen({
           </Text>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 11 }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>픽업 장소</Text>
-            <TextInput
-              value={pickup}
-              onChangeText={onPickup}
-              placeholder="정문 CU 앞"
-              placeholderTextColor={t.dim}
-              style={styles.createInput}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>픽업 시간</Text>
-            <TextInput
-              value={time}
-              onChangeText={onTime}
-              placeholder="오늘 저녁 7시"
-              placeholderTextColor={t.dim}
-              style={styles.createInput}
-            />
-          </View>
+        <View>
+          <Text style={styles.fieldLabel}>픽업 장소</Text>
+          <Pressable
+            onPress={() => setShowPlaceSearch(true)}
+            style={[
+              styles.createInput,
+              {
+                height: undefined,
+                minHeight: 46,
+                paddingVertical: 10,
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: t.border,
+                borderRadius: 10,
+              },
+            ]}
+          >
+            <Text
+              style={{ fontSize: 14, color: pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
+              numberOfLines={1}
+            >
+              {pickupPlace
+                ? pickupPlace.isDefault
+                  ? `현위치: ${pickupPlace.address || pickupPlace.name}`
+                  : pickupPlace.name
+                : !locationAvailable
+                  ? "위치를 찾을 수 없어요. GPS를 확인해주세요."
+                  : "장소를 검색하세요"}
+            </Text>
+            {pickupPlace && !pickupPlace.isDefault && !!pickupPlace.address && pickupPlace.name !== pickupPlace.address && (
+              <Text style={{ fontSize: 11, color: t.muted, marginTop: 2 }} numberOfLines={1}>
+                {pickupPlace.address}
+              </Text>
+            )}
+          </Pressable>
+
+          {/* 미니 맵 */}
+          {pickupPlace && <Pressable
+            onPress={() => setShowPlaceSearch(true)}
+            style={{
+              height: 130,
+              borderRadius: 10,
+              overflow: "hidden",
+              marginTop: 8,
+              borderWidth: 1,
+              borderColor: t.border,
+            }}
+          >
+            {Platform.OS !== "web" && KAKAO_JS_KEY ? (
+              <WebView
+                ref={miniMapRef}
+                originWhitelist={["*"]}
+                source={{ html: miniMapHtml, baseUrl: "https://localhost" }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                scrollEnabled={false}
+                bounces={false}
+                overScrollMode="never"
+                setSupportMultipleWindows={false}
+              />
+            ) : (
+              <View style={{ flex: 1, backgroundColor: "#E8EDE6" }} />
+            )}
+            <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
+              <View style={{ marginBottom: 32 }}>
+                <MapCenterPin />
+              </View>
+            </View>
+          </Pressable>}
+        </View>
+
+        <View>
+          <Text style={styles.fieldLabel}>픽업 시간</Text>
+          <TextInput
+            value={time}
+            onChangeText={onTime}
+            placeholder="오늘 저녁 7시"
+            placeholderTextColor={t.dim}
+            style={styles.createInput}
+          />
         </View>
 
         <View>
@@ -192,6 +272,16 @@ export function CreateScreen({
           </Text>
         </Pressable>
       </View>
+
+      <PlaceSearchSheet
+        visible={showPlaceSearch}
+        initialCenter={initialCenter}
+        onSelect={(place) => {
+          onPickupPlace(place);
+          setShowPlaceSearch(false);
+        }}
+        onClose={() => setShowPlaceSearch(false)}
+      />
     </View>
   );
 }
