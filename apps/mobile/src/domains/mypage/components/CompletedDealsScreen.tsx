@@ -23,6 +23,10 @@ export function CompletedDealsScreen({
   onBack: () => void;
   onSelect?: (deal: Deal) => void;
 }) {
+  const visibleDeals = onSelect
+    ? deals.filter((deal) => deal.hostId !== meId)
+    : deals;
+
   return (
     <View style={styles.flex}>
       <View style={styles.simpleHeader}>
@@ -32,7 +36,7 @@ export function CompletedDealsScreen({
         <Text style={styles.simpleHeaderTitle}>{title}</Text>
       </View>
 
-      {deals.length === 0 ? (
+      {visibleDeals.length === 0 ? (
         <EmptyState
           emoji="✓"
           title={emptyTitle}
@@ -40,7 +44,7 @@ export function CompletedDealsScreen({
         />
       ) : (
         <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
-          {deals.map((deal) => {
+          {visibleDeals.map((deal) => {
             const isHost = deal.hostId === meId;
             const Wrapper = onSelect ? Pressable : View;
             return (
