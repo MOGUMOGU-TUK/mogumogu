@@ -106,6 +106,7 @@ export function AppShell() {
   const [cQty, setCQty] = useState("10");
   const [cPickup, setCPickup] = useState("");
   const [cTime, setCTime] = useState("");
+  const [cImageUris, setCImageUris] = useState<string[]>([]);
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
     time: 0,
     fair: 0,
@@ -479,6 +480,7 @@ export function AppShell() {
       pickupExpectedTime: cTime || "시간 미정",
       splitMethod: "수량 기준 비례 분담",
       recruitmentDeadline: "미정",
+      imageUris: cImageUris,
       ...(verifiedLocation
         ? {
           pickupLatitude: verifiedLocation.latitude,
@@ -505,6 +507,7 @@ export function AppShell() {
     setCQty("10");
     setCPickup("");
     setCTime("");
+    setCImageUris([]);
     go("home", "home");
     showToast("공구가 게시됐어요! 🎉");
   }
@@ -686,6 +689,8 @@ export function AppShell() {
                 onQty={setCQty}
                 onPickup={setCPickup}
                 onTime={setCTime}
+                imageUris={cImageUris}
+                onImageUris={setCImageUris}
                 onBack={() => go(tab)}
                 onPost={handleCreate}
               />

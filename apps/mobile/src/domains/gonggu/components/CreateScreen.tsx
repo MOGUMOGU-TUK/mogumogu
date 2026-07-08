@@ -1,9 +1,12 @@
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { CREATE_CATS } from "../types";
 import { fmt } from "../utils";
+
+const MAX_PHOTOS = 5;
 
 type CreateScreenProps = {
   cat: string;
@@ -18,6 +21,8 @@ type CreateScreenProps = {
   onQty: (v: string) => void;
   onPickup: (v: string) => void;
   onTime: (v: string) => void;
+  imageUris: string[];
+  onImageUris: (uris: string[]) => void;
   onBack: () => void;
   onPost: () => void | Promise<void>;
 };
@@ -35,10 +40,51 @@ export function CreateScreen({
   onQty,
   onPickup,
   onTime,
+  imageUris,
+  onImageUris,
   onBack,
   onPost,
 }: CreateScreenProps) {
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
+  const remaining = MAX_PHOTOS - imageUris.length;
+
+  function openPhotoPicker() {
+    Alert.alert("사진 추가", "", [
+      {
+        text: "카메라 촬영",
+        onPress: async () => {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) {
+            Alert.alert("카메라 권한이 필요해요.");
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+          if (!result.canceled) {
+            onImageUris([...imageUris, result.assets[0]!.uri].slice(0, MAX_PHOTOS));
+          }
+        },
+      },
+      {
+        text: "갤러리에서 선택",
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: "images",
+            allowsMultipleSelection: true,
+            selectionLimit: remaining,
+            quality: 0.8,
+          });
+          if (!result.canceled) {
+            onImageUris([...imageUris, ...result.assets.map((a) => a.uri)].slice(0, MAX_PHOTOS));
+          }
+        },
+      },
+      { text: "취소", style: "cancel" },
+    ]);
+  }
+
+  function removeImage(index: number) {
+    onImageUris(imageUris.filter((_, i) => i !== index));
+  }
 
   return (
     <View style={styles.flex}>
@@ -52,14 +98,36 @@ export function CreateScreen({
       <ScrollView contentContainerStyle={styles.createBody}>
         <View>
           <Text style={styles.fieldLabel}>상품 사진</Text>
-          <View style={{ flexDirection: "row", gap: 9, marginTop: 9 }}>
-            <Pressable style={styles.photoAdd}>
-              <CameraIcon size={22} color={t.dim} />
-              <Text style={{ fontSize: 11, fontWeight: "600", color: t.dim }}>
-                0/5
-              </Text>
-            </Pressable>
-            <View style={[styles.photoThumb, { backgroundColor: "#EDDEE3" }]} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 9, marginTop: 9 }}>
+            {imageUris.map((uri, i) => (
+              <View key={i} style={{ position: "relative" }}>
+                <Image source={{ uri }} style={styles.photoThumb} />
+                <Pressable
+                  onPress={() => removeImage(i)}
+                  style={{
+                    position: "absolute",
+                    top: -6,
+                    right: -6,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: t.ink,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: "#fff", lineHeight: 14 }}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+            {imageUris.length < MAX_PHOTOS && (
+              <Pressable style={styles.photoAdd} onPress={openPhotoPicker}>
+                <CameraIcon size={22} color={t.dim} />
+                <Text style={{ fontSize: 11, fontWeight: "600", color: t.dim }}>
+                  {imageUris.length}/{MAX_PHOTOS}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
