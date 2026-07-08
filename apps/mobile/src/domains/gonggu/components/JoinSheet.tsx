@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
@@ -13,6 +14,7 @@ type JoinSheetProps = {
 };
 
 export function JoinSheet({ deal, onClose, onConfirm }: JoinSheetProps) {
+  const insets = useSafeAreaInsets();
   const remaining = Math.max(0, deal.max - deal.cur);
   const [qty, setQty] = useState(remaining > 0 ? 1 : 0);
   const price = unitPrice(deal);
@@ -20,7 +22,7 @@ export function JoinSheet({ deal, onClose, onConfirm }: JoinSheetProps) {
 
   return (
     <Pressable style={styles.sheetBackdrop} onPress={onClose}>
-      <Pressable style={styles.sheet} onPress={() => {}}>
+      <Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 26) }]} onPress={() => {}}>
         <View style={styles.sheetGrabber} />
         <Text style={{ fontSize: 19, fontWeight: "800", color: t.ink }}>
           이 공구에 참여할까요?

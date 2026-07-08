@@ -25,6 +25,7 @@ import { sendMessageDoc } from "../domains/chat/services/chatRepository";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
   cancelGongguDoc,
+  completeGongguDoc,
   createGongguDoc,
   hideGongguChatDoc,
 } from "../domains/gonggu/services/gongguRepository";
@@ -35,6 +36,7 @@ import {
   markNotifReadDoc,
   saveNotifSettings,
   subscribeNotifs,
+  writeNotifDoc,
   type NotifSettings,
 } from "../domains/notifications/services/notificationService";
 import {
@@ -117,6 +119,7 @@ export function AppShell() {
     chat: false,
   });
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
+  const [dismissedReviewIds, setDismissedReviewIds] = useState<string[]>([]);
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
@@ -229,6 +232,25 @@ export function AppShell() {
     () => mapDeals.find((d) => d.id === mapSel) ?? mapDeals[0] ?? null,
     [mapDeals, mapSel],
   );
+
+  /* 내가 참여했고 아직 후기를 안 쓴 완료 공구 (모달 유도용) */
+  const pendingReviewDeal = useMemo(() => {
+    if (!currentUser.id || auth.user?.isAnonymous) return null;
+    return (
+      deals.find(
+        (d) =>
+          d.status === "review_required" &&
+          d.hostId !== currentUser.id &&
+          !dismissedReviewIds.includes(d.id) &&
+          data.participations.some(
+            (p) =>
+              p.gongguId === d.id &&
+              p.userId === currentUser.id &&
+              p.reviewStatus !== "completed",
+          ),
+      ) ?? null
+    );
+  }, [deals, data.participations, currentUser.id, dismissedReviewIds, auth.user?.isAnonymous]);
 
   /* 내가 주최했거나 참여 중인 채팅방 (방장이 숨긴 방은 제외) */
   const myRooms = useMemo(
@@ -368,6 +390,42 @@ export function AppShell() {
     });
   }
 
+  function completeGonggu(deal: Deal) {
+    setConfirm({
+      title: "거래완료로 표시할까요?",
+      message: "참여자들에게 후기 작성 안내를 보내고 채팅방이 종료돼요.",
+      confirmLabel: "거래완료",
+      onConfirm: async () => {
+        setConfirm(null);
+        if (!isFirebaseConfigured()) {
+          showToast("Firebase 설정이 필요해요.");
+          return;
+        }
+        try {
+          await completeGongguDoc(deal.id);
+        } catch {
+          showToast("거래완료 처리 중 오류가 발생했어요.");
+          return;
+        }
+        const participantIds = data.participations
+          .filter((p) => p.gongguId === deal.id)
+          .map((p) => p.userId);
+        void Promise.all(
+          participantIds.map((uid) =>
+            writeNotifDoc(uid, {
+              type: "review",
+              title: "거래가 완료됐어요!",
+              body: `[${deal.title}] 후기를 남겨주세요`,
+              gongguId: deal.id,
+            }),
+          ),
+        );
+        go("chatList", "chat");
+        showToast("거래완료! 참여자들에게 후기 안내를 보냈어요");
+      },
+    });
+  }
+
   async function confirmJoin(quantity: number) {
     if (!selectedId) return;
     if (isFirebaseConfigured()) {
@@ -423,10 +481,10 @@ export function AppShell() {
       recruitmentDeadline: "미정",
       ...(verifiedLocation
         ? {
-            pickupLatitude: verifiedLocation.latitude,
-            pickupLongitude: verifiedLocation.longitude,
-            pickupNeighborhood: verifiedLocation.neighborhood
-          }
+          pickupLatitude: verifiedLocation.latitude,
+          pickupLongitude: verifiedLocation.longitude,
+          pickupNeighborhood: verifiedLocation.neighborhood
+        }
         : {}),
     };
 
@@ -598,9 +656,11 @@ export function AppShell() {
                 <ChatScreen
                   deal={sel}
                   messages={chatMsgs}
+                  isHost={sel.hostId === currentUser.id}
                   onBack={() => go("chatList", "chat")}
                   onSend={sendMessage}
                   onLeave={() => leaveRoom(sel)}
+                  onComplete={() => completeGonggu(sel)}
                 />
               ) : (
                 <EmptyState
@@ -716,6 +776,22 @@ export function AppShell() {
               danger={confirm.danger}
               onConfirm={confirm.onConfirm}
               onClose={() => setConfirm(null)}
+            />
+          )}
+
+          {pendingReviewDeal && showNav && (
+            <ConfirmSheet
+              title="후기를 남겨주세요!"
+              message={`[${pendingReviewDeal.title}] 거래가 완료됐어요. 참여 후기를 남겨주시겠어요?`}
+              confirmLabel="후기 작성"
+              onConfirm={() => {
+                setSelectedId(pendingReviewDeal.id);
+                setRatings({ time: 0, fair: 0, manner: 0, desc: 0 });
+                setScreen("review");
+              }}
+              onClose={() =>
+                setDismissedReviewIds((prev) => [...prev, pendingReviewDeal.id])
+              }
             />
           )}
 

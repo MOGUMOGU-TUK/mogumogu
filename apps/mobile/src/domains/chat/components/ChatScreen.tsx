@@ -11,15 +11,19 @@ import type { ChatMsg } from "../types";
 export function ChatScreen({
   deal,
   messages,
+  isHost,
   onBack,
   onSend,
   onLeave,
+  onComplete,
 }: {
   deal: Deal;
   messages: ChatMsg[];
+  isHost: boolean;
   onBack: () => void;
   onSend: (text: string) => void;
   onLeave: () => void;
+  onComplete: () => void;
 }) {
   const [input, setInput] = useState("");
 
@@ -49,9 +53,15 @@ export function ChatScreen({
             {memberStr(deal)} · {statusOf(deal)}
           </Text>
         </View>
-        <Pressable style={styles.chatLeaveBtn} onPress={onLeave}>
-          <Text style={styles.chatLeaveText}>나가기</Text>
-        </Pressable>
+        {isHost && !["review_required", "completed", "canceled"].includes(deal.status) ? (
+          <Pressable style={styles.chatLeaveBtn} onPress={onComplete}>
+            <Text style={[styles.chatLeaveText, { color: t.rose, fontWeight: "700" }]}>거래완료</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.chatLeaveBtn} onPress={onLeave}>
+            <Text style={styles.chatLeaveText}>나가기</Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
