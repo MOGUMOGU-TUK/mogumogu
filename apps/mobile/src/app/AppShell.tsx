@@ -264,17 +264,26 @@ export function AppShell() {
       .finally(() => setProfileLoaded(true));
   }, [auth.user?.uid]);
 
+  const gongguHostUserIdsKey = useMemo(
+    () =>
+      Array.from(new Set(data.gonggus.map((gonggu) => gonggu.hostUserId)))
+        .sort()
+        .join("|"),
+    [data.gonggus],
+  );
+
   useEffect(() => {
     const uid = auth.user?.uid;
     if (!uid || auth.user?.isAnonymous || !isFirebaseConfigured()) {
-      setUserStatsById({});
+      setUserStatsById((prev) => (Object.keys(prev).length > 0 ? {} : prev));
       return;
     }
 
     let active = true;
-    const targetUserIds = Array.from(
-      new Set([uid, ...data.gonggus.map((gonggu) => gonggu.hostUserId)]),
-    );
+    const hostUserIds = gongguHostUserIdsKey
+      ? gongguHostUserIdsKey.split("|")
+      : [];
+    const targetUserIds = Array.from(new Set([uid, ...hostUserIds]));
 
     void Promise.all(
       targetUserIds.map(async (targetUserId) => {
@@ -289,7 +298,7 @@ export function AppShell() {
     return () => {
       active = false;
     };
-  }, [auth.user?.uid, auth.user?.isAnonymous, data.gonggus]);
+  }, [auth.user?.uid, auth.user?.isAnonymous, gongguHostUserIdsKey]);
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
