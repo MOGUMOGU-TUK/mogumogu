@@ -11,6 +11,7 @@ export type Screen =
   | "mypage"
   | "profileEdit"
   | "completedDeals"
+  | "receivedReviews"
   | "noshowDeals"
   | "notifications";
 

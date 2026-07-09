@@ -21,6 +21,7 @@ export type MyPageReviewTag = {
 
 export function MyPageScreen({
   nickname,
+  profileImageUrl,
   locationLabel,
   mannerScore,
   completedDealCount,
@@ -31,10 +32,12 @@ export function MyPageScreen({
   onToggle,
   onEditProfile,
   onOpenCompletedDeals,
+  onOpenReceivedReviews,
   onOpenNoshowDeals,
   onReviewDemo,
 }: {
   nickname: string;
+  profileImageUrl?: string | null;
   locationLabel: string;
   mannerScore: number;
   completedDealCount: number;
@@ -45,6 +48,7 @@ export function MyPageScreen({
   onToggle: (key: NotifKey) => void;
   onEditProfile: () => void;
   onOpenCompletedDeals: () => void;
+  onOpenReceivedReviews: () => void;
   onOpenNoshowDeals: () => void;
   onReviewDemo: () => void;
 }) {
@@ -57,9 +61,17 @@ export function MyPageScreen({
       <View style={styles.profileCard}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
           <View style={styles.profileAvatar}>
-            <Text style={{ fontSize: 22, fontWeight: "800", color: t.rose }}>
-              {nickname.charAt(0)}
-            </Text>
+            {profileImageUrl ? (
+              <Image
+                source={{ uri: profileImageUrl }}
+                style={styles.profileAvatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={{ fontSize: 22, fontWeight: "800", color: t.rose }}>
+                {nickname.charAt(0)}
+              </Text>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <View
@@ -73,13 +85,6 @@ export function MyPageScreen({
               <Text style={{ fontSize: 17, fontWeight: "800", color: t.ink }}>
                 {nickname}
               </Text>
-              <View style={styles.eduChip}>
-                <Text
-                  style={{ fontSize: 10, fontWeight: "700", color: t.greenInk }}
-                >
-                  🎓 학교인증
-                </Text>
-              </View>
             </View>
             <Text style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>{locationLabel}</Text>
           </View>
@@ -123,7 +128,11 @@ export function MyPageScreen({
           label="거래 완료"
           onPress={onOpenCompletedDeals}
         />
-        <StatCard value={String(receivedReviewCount)} label="받은 후기" />
+        <StatCard
+          value={String(receivedReviewCount)}
+          label="받은 후기"
+          onPress={onOpenReceivedReviews}
+        />
         <StatCard
           value={String(noshowCount)}
           label="노쇼"

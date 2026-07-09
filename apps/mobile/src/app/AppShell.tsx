@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -75,9 +76,11 @@ import {
   type MyPageReviewTag,
 } from "../domains/mypage/components/MyPageScreen";
 import { ProfileEditScreen } from "../domains/mypage/components/ProfileEditScreen";
+import { ReceivedReviewsScreen } from "../domains/mypage/components/ReceivedReviewsScreen";
 import {
   loadUserProfileDoc,
   saveUserProfileDoc,
+  uploadUserProfileImage,
   type UserProfileDoc,
 } from "../domains/mypage/services/profileRepository";
 import { NotifScreen } from "../domains/notifications/components/NotifScreen";
@@ -141,6 +144,7 @@ function applyProfileDoc(
   setNickname: (nickname: string) => void,
   setLastNicknameChangedAt: (changedAt: string | null) => void,
   setVerifiedLocation: (location: VerifiedLocation | null) => void,
+  setProfileImageUrl: (imageUrl: string | null) => void,
 ) {
   if (!profile) return;
   if (profile.nickname?.trim()) {
@@ -150,6 +154,7 @@ function applyProfileDoc(
   if (profile.verifiedLocation?.neighborhood) {
     setVerifiedLocation(profile.verifiedLocation);
   }
+  setProfileImageUrl(profile.profileImageUrl ?? null);
 }
 
 /**
@@ -176,6 +181,8 @@ export function AppShell() {
 
   const [nickname, setNickname] = useState("");
   const [lastNicknameChangedAt, setLastNicknameChangedAt] = useState<string | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [profileImageUploading, setProfileImageUploading] = useState(false);
   const [verifyStep, setVerifyStep] = useState(0);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -211,6 +218,7 @@ export function AppShell() {
     const uid = auth.user?.uid;
     if (!uid) {
       setLastNicknameChangedAt(null);
+      setProfileImageUrl(null);
       setProfileLoaded(false);
       return;
     }
@@ -227,6 +235,7 @@ export function AppShell() {
             setNickname,
             setLastNicknameChangedAt,
             setVerifiedLocation,
+            setProfileImageUrl,
           );
           return;
         }
@@ -242,6 +251,7 @@ export function AppShell() {
           setNickname,
           setLastNicknameChangedAt,
           setVerifiedLocation,
+          setProfileImageUrl,
         );
 
         if (localProfile.nickname || localProfile.verifiedLocation) {
@@ -517,6 +527,11 @@ export function AppShell() {
     [deals, data.participations, currentUser.id],
   );
 
+  const receivedReviews = useMemo(
+    () => data.reviews.filter((review) => review.revieweeId === currentUser.id),
+    [currentUser.id, data.reviews],
+  );
+
   const currentUserStats = userStatsById[currentUser.id];
 
   const noshowDeals = useMemo(() => {
@@ -526,9 +541,6 @@ export function AppShell() {
   }, [currentUserStats?.noshowGongguIds, deals]);
 
   const myPageStats = useMemo(() => {
-    const receivedReviews = data.reviews.filter(
-      (r) => r.revieweeId === currentUser.id,
-    );
     const reviewTags = REVIEW_TAG_DEFS.map((tagDef) => {
       const count = receivedReviews.reduce((sum, review) => {
         const hasTag = review.tags.some((tag) =>
@@ -553,7 +565,7 @@ export function AppShell() {
       noshowCount: currentUserStats?.noshowCount ?? 0,
       reviewTags,
     };
-  }, [completedDeals.length, currentUser.id, currentUserStats?.noshowCount, data.reviews]);
+  }, [completedDeals.length, currentUserStats?.noshowCount, receivedReviews]);
 
   useEffect(() => {
     return () => {
@@ -611,7 +623,7 @@ export function AppShell() {
         go("home", "home");
         return true;
       }
-      if (screen === "completedDeals" || screen === "noshowDeals") {
+      if (screen === "completedDeals" || screen === "receivedReviews" || screen === "noshowDeals") {
         go("mypage", "mypage");
         return true;
       }
@@ -648,6 +660,10 @@ export function AppShell() {
   function openCompletedDeals(mode: "view" | "review") {
     setCompletedDealsMode(mode);
     setScreen("completedDeals");
+  }
+
+  function openReceivedReviews() {
+    setScreen("receivedReviews");
   }
 
   function openNoshowDeals() {
@@ -927,6 +943,7 @@ export function AppShell() {
       nickname: trimmed,
       lastNicknameChangedAt: changedAt,
       verifiedLocation,
+      profileImageUrl,
     };
 
     if (uid) {
@@ -946,6 +963,48 @@ export function AppShell() {
     showToast("프로필을 저장했어요");
   }
 
+  async function changeProfileImage() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showToast("사진 접근 권한이 필요해요.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    const uid = auth.user?.uid;
+    if (!uid || auth.user?.isAnonymous || !isFirebaseConfigured()) {
+      setProfileImageUrl(result.assets[0].uri);
+      showToast("프로필 사진을 변경했어요");
+      return;
+    }
+
+    setProfileImageUploading(true);
+    try {
+      const imageUrl = await uploadUserProfileImage(uid, result.assets[0].uri);
+      const profile: UserProfileDoc = {
+        nickname: currentUser.nickname,
+        lastNicknameChangedAt,
+        verifiedLocation,
+        profileImageUrl: imageUrl,
+      };
+      await saveUserProfileDoc(uid, profile);
+      await AsyncStorage.setItem(profileStorageKey(uid), JSON.stringify(profile));
+      setProfileImageUrl(imageUrl);
+      showToast("프로필 사진을 변경했어요");
+    } catch {
+      showToast("프로필 사진 저장에 실패했어요. 다시 시도해주세요.");
+    } finally {
+      setProfileImageUploading(false);
+    }
+  }
+
   async function findNeighborhoodFromProfile() {
     setLocating(true);
     setLocateError(null);
@@ -958,6 +1017,7 @@ export function AppShell() {
           nickname: currentUser.nickname,
           lastNicknameChangedAt,
           verifiedLocation: location,
+          profileImageUrl,
         };
         try {
           await saveUserProfileDoc(uid, profile);
@@ -986,6 +1046,7 @@ export function AppShell() {
         nickname: nickname.trim(),
         lastNicknameChangedAt,
         verifiedLocation,
+        profileImageUrl,
       };
       try {
         await saveUserProfileDoc(uid, profile);
@@ -1229,6 +1290,7 @@ export function AppShell() {
             {screen === "mypage" && (
               <MyPageScreen
                 nickname={currentUser.nickname}
+                profileImageUrl={profileImageUrl}
                 locationLabel={verifiedLocationLabel}
                 mannerScore={myPageStats.mannerScore}
                 completedDealCount={myPageStats.completedDealCount}
@@ -1239,6 +1301,7 @@ export function AppShell() {
                 onToggle={toggleNotif}
                 onEditProfile={() => setScreen("profileEdit")}
                 onOpenCompletedDeals={() => openCompletedDeals("view")}
+                onOpenReceivedReviews={openReceivedReviews}
                 onOpenNoshowDeals={openNoshowDeals}
                 onReviewDemo={() => openCompletedDeals("review")}
               />
@@ -1247,13 +1310,16 @@ export function AppShell() {
             {screen === "profileEdit" && (
               <ProfileEditScreen
                 nickname={currentUser.nickname}
+                profileImageUrl={profileImageUrl}
                 locationLabel={verifiedLocationLabel}
                 canChangeNickname={nicknameChangeState.canChange}
                 nextNicknameChangeDate={nicknameChangeState.nextDate}
                 locationLoading={locating}
+                imageUploading={profileImageUploading}
                 locationError={locateError}
                 onBack={() => go("mypage", "mypage")}
                 onSave={(nextNickname) => void saveProfileNickname(nextNickname)}
+                onChangeProfileImage={() => void changeProfileImage()}
                 onFindNeighborhood={() => void findNeighborhoodFromProfile()}
               />
             )}
@@ -1292,6 +1358,14 @@ export function AppShell() {
                     ? startReviewFromCompletedDeal
                     : undefined
                 }
+              />
+            )}
+
+            {screen === "receivedReviews" && (
+              <ReceivedReviewsScreen
+                reviews={receivedReviews}
+                deals={deals}
+                onBack={() => go("mypage", "mypage")}
               />
             )}
 

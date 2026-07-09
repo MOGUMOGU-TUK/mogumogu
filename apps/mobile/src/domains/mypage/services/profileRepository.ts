@@ -1,4 +1,5 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 
 import { getFirebaseServices } from "../../../services/firebase/client";
 import type { VerifiedLocation } from "../../location/services/verifyNeighborhood";
@@ -9,6 +10,7 @@ export type UserProfileDoc = {
   nickname?: string;
   lastNicknameChangedAt?: string | null;
   verifiedLocation?: VerifiedLocation | null;
+  profileImageUrl?: string | null;
 };
 
 export async function loadUserProfileDoc(uid: string): Promise<UserProfileDoc | null> {
@@ -35,4 +37,20 @@ export async function saveUserProfileDoc(
     },
     { merge: true },
   );
+}
+
+export async function uploadUserProfileImage(
+  uid: string,
+  imageUri: string,
+): Promise<string> {
+  const services = getFirebaseServices();
+  if (!services) {
+    throw new Error("Firebase가 설정되지 않았습니다.");
+  }
+
+  const response = await fetch(imageUri);
+  const blob = await response.blob();
+  const fileRef = storageRef(services.storage, `profileImages/${uid}/avatar.jpg`);
+  await uploadBytes(fileRef, blob);
+  return getDownloadURL(fileRef);
 }
