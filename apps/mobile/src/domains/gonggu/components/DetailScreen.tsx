@@ -1,10 +1,11 @@
 import { useMemo } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { MapCenterPin } from "../../../shared/ui/icons";
+import { getMannerLevel } from "../../../shared/utils/mannerLevel";
 import { buildMiniMapHtml } from "../../map/services/kakaoGeo";
 import type { Deal } from "../types";
 import {
@@ -13,13 +14,9 @@ import {
   memberStr,
   qtyStr,
   remain,
-  tempColor,
-  tempRatio,
-  tempStr,
   unitPrice,
 } from "../utils";
 import { ProgressBar } from "../../../shared/ui/ProgressBar";
-import { TemperatureGradientBar } from "../../../shared/ui/TemperatureGradientBar";
 
 type DetailScreenProps = {
   deal: Deal;
@@ -46,6 +43,7 @@ export function DetailScreen({
     if (deal.pickupLatitude == null || deal.pickupLongitude == null) return null;
     return buildMiniMapHtml(deal.pickupLatitude, deal.pickupLongitude);
   }, [deal.pickupLatitude, deal.pickupLongitude]);
+  const manner = getMannerLevel(deal.mannerScore);
 
   return (
     <View style={styles.flex}>
@@ -198,24 +196,24 @@ export function DetailScreen({
                   거래 {deal.deals}회 · 후기 {deal.reviews}개 · 노쇼 {deal.noshow}회
                 </Text>
               </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    fontSize: 20,
-                    fontWeight: "800",
-                    color: tempColor(deal.temp),
-                  }}
-                >
-                  {tempStr(deal.temp)}
+              <View style={{ alignItems: "flex-end", gap: 4 }}>
+                <Image
+                  source={manner.level.image}
+                  style={{ width: 48, height: 48 }}
+                  resizeMode="contain"
+                />
+                <Text style={{ fontSize: 11, fontWeight: "700", color: t.rose }}>
+                  {manner.level.name}
                 </Text>
-                <Text style={{ fontSize: 11, color: t.muted }}>매너온도</Text>
               </View>
             </View>
             <View style={{ marginTop: 12 }}>
-              <TemperatureGradientBar
-                ratio={tempRatio(deal.temp)}
-                knobColor={tempColor(deal.temp)}
-              />
+              <ProgressBar pct={manner.progress} />
+              <Text style={{ fontSize: 11, color: t.muted, marginTop: 6 }}>
+                {manner.remaining > 0
+                  ? `다음 단계까지 ${manner.remaining}점 남았어요`
+                  : "최고 단계에 도달했어요"}
+              </Text>
             </View>
           </View>
         </View>

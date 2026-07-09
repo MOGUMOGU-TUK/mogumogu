@@ -25,6 +25,7 @@ export function formatRecruitmentDeadline(deadline: string): string {
 
 export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
   const gReviews = reviews.filter((r) => r.gongguId === g.id);
+  const hostReviews = reviews.filter((r) => r.revieweeId === g.hostUserId);
   return {
     id: g.id,
     hostId: g.hostUserId,
@@ -46,7 +47,10 @@ export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
     spot: g.pickupPlaceName,
     pickup: g.pickupExpectedTime,
     leader: g.hostNickname,
-    temp: g.hostTrustScore,
+    mannerScore: Math.min(
+      100,
+      hostReviews.reduce((sum, review) => sum + review.rating, 0),
+    ),
     deals: 0,
     reviews: gReviews.length,
     noshow: 0,

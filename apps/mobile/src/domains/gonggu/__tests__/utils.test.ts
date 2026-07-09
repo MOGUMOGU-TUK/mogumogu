@@ -21,7 +21,7 @@ function deal(overrides: Partial<Deal>): Deal {
     spot: "정문",
     pickup: "저녁",
     leader: "이웃",
-    temp: 36.5,
+    mannerScore: 0,
     deals: 0,
     reviews: 0,
     noshow: 0,
@@ -109,7 +109,7 @@ describe("gongguToUi", () => {
       max: 8,
       members: 2,
       leader: "감귤러",
-      temp: 38.2,
+      mannerScore: 0,
       store: "이마트",
       dist: "250m",
     });
