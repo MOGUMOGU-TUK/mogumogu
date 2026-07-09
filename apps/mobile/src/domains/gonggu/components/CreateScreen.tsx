@@ -29,6 +29,8 @@ type CreateScreenProps = {
   onPickupUndecided: (v: boolean) => void;
   timeDate: Date | null;
   onTimeDate: (d: Date | null) => void;
+  timeUndecided: boolean;
+  onTimeUndecided: (v: boolean) => void;
   initialCenter?: { lat: number; lng: number };
   locationAvailable: boolean;
   onBack: () => void;
@@ -50,12 +52,17 @@ export function CreateScreen({
   onPickupUndecided,
   timeDate,
   onTimeDate,
+  timeUndecided,
+  onTimeUndecided,
   initialCenter,
   locationAvailable,
   onBack,
   onPost,
 }: CreateScreenProps) {
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
+  const pickupReady = pickupUndecided || !!pickupPlace;
+  const timeReady = timeUndecided || !!timeDate;
+  const canPost = pickupReady && timeReady;
   const [showPlaceSearch, setShowPlaceSearch] = useState(false);
   const miniMapRef = useRef<WebView>(null);
 
@@ -301,30 +308,37 @@ export function CreateScreen({
                 },
               ]}
             >
-              <Text style={{ fontSize: 14, color: timeDate ? t.ink : t.dim }}>
-                {timeDate ? formatPickupTime(timeDate) : "시간 미정"}
+              <Text style={{ fontSize: 14, color: timeDate || timeUndecided ? t.ink : t.dim }}>
+                {timeUndecided ? "시간 미정" : timeDate ? formatPickupTime(timeDate) : "시간을 선택하세요"}
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => timeDate !== null ? onTimeDate(null) : openTimePicker()}
+              onPress={() => {
+                if (timeUndecided) {
+                  onTimeUndecided(false);
+                } else {
+                  onTimeUndecided(true);
+                  onTimeDate(null);
+                }
+              }}
               style={{
                 height: 46,
                 paddingHorizontal: 14,
                 borderRadius: 10,
                 borderWidth: 1,
-                borderColor: timeDate === null ? t.rose : t.border,
-                backgroundColor: timeDate === null ? t.roseSoft : "#fff",
+                borderColor: timeUndecided ? t.rose : t.border,
+                backgroundColor: timeUndecided ? t.roseSoft : "#fff",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Text style={{ fontSize: 13, fontWeight: "600", color: timeDate === null ? t.rose : t.dim }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: timeUndecided ? t.rose : t.dim }}>
                 미정
               </Text>
             </Pressable>
           </View>
 
-          {timeDate === null && (
+          {timeUndecided && (
             <Text style={{ fontSize: 12, color: t.muted, marginTop: 6 }}>
               픽업 시간은 채팅방에서 참여자들과 함께 정할 수 있어요
             </Text>
@@ -343,8 +357,9 @@ export function CreateScreen({
 
       <View style={styles.stickyFooter}>
         <Pressable
-          style={[styles.footerButton, { backgroundColor: t.pink }]}
-          onPress={onPost}
+          style={[styles.footerButton, { backgroundColor: canPost ? t.pink : t.border }]}
+          onPress={canPost ? onPost : undefined}
+          disabled={!canPost}
         >
           <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
             공구 게시하기
@@ -365,7 +380,7 @@ export function CreateScreen({
       <DateTimePickerModal
         visible={showPicker}
         value={pickerBase}
-        onConfirm={(date) => { onTimeDate(date); setShowPicker(false); }}
+        onConfirm={(date) => { onTimeDate(date); onTimeUndecided(false); setShowPicker(false); }}
         onCancel={() => setShowPicker(false)}
       />
     </View>
