@@ -87,9 +87,7 @@ export function DetailScreen({
           </View>
 
           <Text style={styles.detailTitle}>{deal.title}</Text>
-          <Text style={styles.dealStore}>
-            {deal.store} · {deal.dist}
-          </Text>
+          {!!deal.store && <Text style={styles.dealStore}>{deal.store}</Text>}
 
           <View style={styles.priceCard}>
             <View
