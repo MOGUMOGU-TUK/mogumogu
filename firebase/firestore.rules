@@ -13,6 +13,16 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function isNotifSettingKey(type) {
+      return type in ["join", "full", "deadline", "chat"];
+    }
+
+    function notifSettingEnabled(userId, type) {
+      let settings = get(/databases/$(database)/documents/users/$(userId)).data.get("notifSettings", {});
+      return !isNotifSettingKey(type)
+        || settings.get(type, type != "chat") == true;
+    }
+
     match /users/{userId} {
       allow read: if signedIn();
       allow create, update: if isOwner(userId);
@@ -81,7 +91,9 @@ service cloud.firestore {
     match /notifications/{userId} {
       match /items/{itemId} {
         allow read, update, delete: if isOwner(userId);
-        allow create: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.type is string
+          && notifSettingEnabled(userId, request.resource.data.type);
       }
     }
 
