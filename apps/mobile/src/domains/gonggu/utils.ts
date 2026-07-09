@@ -23,9 +23,21 @@ export function formatRecruitmentDeadline(deadline: string): string {
   return deadline;
 }
 
-export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
-  const gReviews = reviews.filter((r) => r.gongguId === g.id);
+const COMPLETED_GONGGU_STATUSES = new Set<Gonggu["status"]>([
+  "review_required",
+  "completed",
+]);
+
+export function gongguToUi(
+  g: Gonggu,
+  reviews: Review[],
+  gonggus: Gonggu[] = [g],
+): Deal {
   const hostReviews = reviews.filter((r) => r.revieweeId === g.hostUserId);
+  const hostCompletedGonggus = gonggus.filter(
+    (item) =>
+      item.hostUserId === g.hostUserId && COMPLETED_GONGGU_STATUSES.has(item.status),
+  );
   return {
     id: g.id,
     hostId: g.hostUserId,
@@ -51,8 +63,8 @@ export function gongguToUi(g: Gonggu, reviews: Review[]): Deal {
       100,
       hostReviews.reduce((sum, review) => sum + review.rating, 0),
     ),
-    deals: 0,
-    reviews: gReviews.length,
+    deals: hostCompletedGonggus.length,
+    reviews: hostReviews.length,
     noshow: 0,
     tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
     method: g.splitMethod,

@@ -44,6 +44,7 @@ export function DetailScreen({
     return buildMiniMapHtml(deal.pickupLatitude, deal.pickupLongitude);
   }, [deal.pickupLatitude, deal.pickupLongitude]);
   const manner = getMannerLevel(deal.mannerScore);
+  const ended = ["review_required", "completed", "canceled"].includes(deal.status);
 
   return (
     <View style={styles.flex}>
@@ -225,9 +226,19 @@ export function DetailScreen({
             {hearted ? "♥" : "♡"}
           </Text>
         </Pressable>
-        <Pressable style={styles.ctaButton} onPress={onCta}>
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
-            {joined ? "채팅방 입장하기" : "참여하기"}
+        <Pressable
+          disabled={ended}
+          style={[styles.ctaButton, ended && { backgroundColor: t.border }]}
+          onPress={onCta}
+        >
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "700",
+              color: ended ? t.muted : "#fff",
+            }}
+          >
+            {ended ? "완료된 거래" : joined ? "채팅방 입장하기" : "참여하기"}
           </Text>
         </Pressable>
       </View>

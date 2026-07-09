@@ -13,6 +13,7 @@ export function CompletedDealsScreen({
   emptyTitle = "완료된 거래가 없어요",
   emptyDesc = "거래가 완료되면 이곳에서 다시 확인할 수 있어요.",
   onBack,
+  onOpen,
   onSelect,
 }: {
   deals: Deal[];
@@ -21,6 +22,7 @@ export function CompletedDealsScreen({
   emptyTitle?: string;
   emptyDesc?: string;
   onBack: () => void;
+  onOpen?: (deal: Deal) => void;
   onSelect?: (deal: Deal) => void;
 }) {
   const visibleDeals = onSelect
@@ -46,12 +48,15 @@ export function CompletedDealsScreen({
         <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
           {visibleDeals.map((deal) => {
             const isHost = deal.hostId === meId;
-            const Wrapper = onSelect ? Pressable : View;
+            const canPress = Boolean(onOpen || onSelect);
+            const Wrapper = canPress ? Pressable : View;
             return (
               <Wrapper
                 key={deal.id}
                 style={styles.dealCard}
-                onPress={onSelect ? () => onSelect(deal) : undefined}
+                onPress={
+                  canPress ? () => (onSelect ?? onOpen)?.(deal) : undefined
+                }
               >
                 <View style={[styles.dealThumb, { backgroundColor: deal.tint }]}>
                   <View style={styles.thumbTag}>

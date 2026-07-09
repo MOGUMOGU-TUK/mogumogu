@@ -83,6 +83,8 @@ export async function joinGongguDoc(gongguId: string, user: User, quantity: numb
 
   const unitPrice = unitPriceOf(gonggu);
   const nextClaimed = gonggu.claimedQuantity + qty;
+  const prevRemaining = Math.max(0, gonggu.totalQuantity - gonggu.claimedQuantity);
+  const nextRemaining = Math.max(0, gonggu.totalQuantity - nextClaimed);
   const participation: Participation = {
     gongguId,
     userId: user.id,
@@ -118,6 +120,21 @@ export async function joinGongguDoc(gongguId: string, user: User, quantity: numb
       type: "join",
       title: "새 참여자가 생겼어요!",
       body: `[${gonggu.title}] ${user.nickname}님이 합류했어요`,
+      gongguId,
+    });
+  }
+
+  // 모집 마감 임박 알림 → 남은 수량이 2 이하가 되는 순간 공구장에게만
+  if (
+    gonggu.hostUserId &&
+    nextRemaining > 0 &&
+    nextRemaining <= 2 &&
+    prevRemaining > 2
+  ) {
+    void writeNotifDoc(gonggu.hostUserId, {
+      type: "deadline",
+      title: "모집 마감이 가까워졌어요",
+      body: `[${gonggu.title}] 앞으로 ${nextRemaining}개만 더 모으면 완료돼요`,
       gongguId,
     });
   }
@@ -208,7 +225,8 @@ export async function submitReviewDoc(
   gonggu: Gonggu,
   reviewer: User,
   rating: number,
-  comment: string
+  comment: string,
+  tags: string[] = [],
 ): Promise<void> {
   const services = getFirebaseServices();
   if (!services) {
@@ -224,7 +242,7 @@ export async function submitReviewDoc(
     reviewerId: reviewer.id,
     revieweeId: gonggu.hostUserId,
     rating,
-    tags: ["시간 약속", "소통 매너"],
+    tags,
     comment,
     createdAt: new Date().toISOString()
   };
