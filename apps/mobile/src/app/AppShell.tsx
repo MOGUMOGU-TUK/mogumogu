@@ -90,7 +90,7 @@ import type { ReviewKey } from "../domains/review/types";
 import type { ChatMsg } from "../domains/chat/types";
 import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
-import { DEFAULT_RECRUITMENT_DEADLINE_LABEL, gongguToUi } from "../domains/gonggu/utils";
+import { DEFAULT_RECRUITMENT_DEADLINE_LABEL, formatPickupTime, gongguToUi } from "../domains/gonggu/utils";
 import { isWithinRadiusKm } from "../domains/location/services/geo";
 import type { ReportCategory, ReportTargetRole, User } from "../types/domain";
 import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
@@ -198,7 +198,8 @@ export function AppShell() {
   const [cTotal, setCTotal] = useState("");
   const [cQty, setCQty] = useState("10");
   const [cPickupPlace, setCPickupPlace] = useState<PickupPlace | null>(null);
-  const [cTime, setCTime] = useState("");
+  const [cPickupUndecided, setCPickupUndecided] = useState(false);
+  const [cTimeDate, setCTimeDate] = useState<Date | null>(null);
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
     time: 0,
     fair: 0,
@@ -867,11 +868,11 @@ export function AppShell() {
       category: createCat,
       totalPrice: Number(cTotal) || 0,
       totalQuantity: Number(cQty) || 1,
-      pickupPlaceName: cPickupPlace?.name ?? "장소 미정",
-      pickupExpectedTime: cTime || "시간 미정",
+      pickupPlaceName: cPickupUndecided ? "장소 미정" : (cPickupPlace?.name ?? "장소 미정"),
+      pickupExpectedTime: cTimeDate ? formatPickupTime(cTimeDate) : "시간 미정",
       splitMethod: "수량 기준 비례 분담",
       recruitmentDeadline: DEFAULT_RECRUITMENT_DEADLINE_LABEL,
-      ...(cPickupPlace
+      ...(cPickupUndecided ? {} : cPickupPlace
         ? {
           pickupLatitude: cPickupPlace.latitude,
           pickupLongitude: cPickupPlace.longitude,
@@ -902,7 +903,8 @@ export function AppShell() {
     setCTotal("");
     setCQty("10");
     setCPickupPlace(null);
-    setCTime("");
+    setCPickupUndecided(false);
+    setCTimeDate(null);
     go("home", "home");
     showToast("공구가 게시됐어요! 🎉");
   }
@@ -1269,12 +1271,14 @@ export function AppShell() {
                 onTitle={setCTitle}
                 total={cTotal}
                 qty={cQty}
-                time={cTime}
                 onTotal={setCTotal}
                 onQty={setCQty}
-                onTime={setCTime}
                 pickupPlace={cPickupPlace}
-                onPickupPlace={setCPickupPlace}
+                pickupUndecided={cPickupUndecided}
+                onPickupPlace={(place) => { setCPickupPlace(place); setCPickupUndecided(false); }}
+                onPickupUndecided={setCPickupUndecided}
+                timeDate={cTimeDate}
+                onTimeDate={setCTimeDate}
                 initialCenter={verifiedLocation
                   ? { lat: verifiedLocation.latitude, lng: verifiedLocation.longitude }
                   : undefined}

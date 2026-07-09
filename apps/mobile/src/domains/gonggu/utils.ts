@@ -75,6 +75,17 @@ export function gongguToUi(
 
 export const fmt = (n: number) => `${Number(n).toLocaleString("ko-KR")}원`;
 
+export function formatPickupTime(d: Date): string {
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const hours = d.getHours();
+  const minutes = d.getMinutes();
+  const ampm = hours < 12 ? "오전" : "오후";
+  const h = hours % 12 || 12;
+  const m = minutes.toString().padStart(2, "0");
+  return `${month}월 ${day}일 ${ampm} ${h}시 ${m}분`;
+}
+
 /** 1개당 가격 = ceil(총가격 / 총수량) */
 export const unitPrice = (d: Deal) => Math.ceil(d.total / Math.max(1, d.max));
 
