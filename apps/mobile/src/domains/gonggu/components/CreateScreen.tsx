@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { WebView } from "react-native-webview";
+import { DateTimePickerModal } from "./DateTimePickerModal";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { CREATE_CATS } from "../types";
-import { fmt } from "../utils";
+import { fmt, formatPickupTime } from "../utils";
 import { PlaceSearchSheet, type PickupPlace } from "./PlaceSearchSheet";
 import { MapCenterPin } from "../../../shared/ui/icons";
 import { buildMiniMapHtml } from "../../map/services/kakaoGeo";
@@ -20,12 +21,14 @@ type CreateScreenProps = {
   onTitle: (v: string) => void;
   total: string;
   qty: string;
-  time: string;
   onTotal: (v: string) => void;
   onQty: (v: string) => void;
-  onTime: (v: string) => void;
   pickupPlace: PickupPlace | null;
+  pickupUndecided: boolean;
   onPickupPlace: (place: PickupPlace) => void;
+  onPickupUndecided: (v: boolean) => void;
+  timeDate: Date | null;
+  onTimeDate: (d: Date | null) => void;
   initialCenter?: { lat: number; lng: number };
   locationAvailable: boolean;
   onBack: () => void;
@@ -39,12 +42,14 @@ export function CreateScreen({
   onTitle,
   total,
   qty,
-  time,
   onTotal,
   onQty,
-  onTime,
   pickupPlace,
+  pickupUndecided,
   onPickupPlace,
+  onPickupUndecided,
+  timeDate,
+  onTimeDate,
   initialCenter,
   locationAvailable,
   onBack,
@@ -53,6 +58,9 @@ export function CreateScreen({
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
   const [showPlaceSearch, setShowPlaceSearch] = useState(false);
   const miniMapRef = useRef<WebView>(null);
+
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerBase, setPickerBase] = useState(new Date());
 
   const initialMapCenter = initialCenter ?? DEFAULT_CENTER;
   const miniMapHtml = useMemo(
@@ -66,6 +74,11 @@ export function CreateScreen({
       `window.moveTo(${pickupPlace.latitude}, ${pickupPlace.longitude}); true;`
     );
   }, [pickupPlace]);
+
+  function openTimePicker() {
+    setPickerBase(timeDate ?? new Date());
+    setShowPicker(true);
+  }
 
   return (
     <View style={styles.flex}>
@@ -171,42 +184,65 @@ export function CreateScreen({
 
         <View>
           <Text style={styles.fieldLabel}>픽업 장소</Text>
-          <Pressable
-            onPress={() => setShowPlaceSearch(true)}
-            style={[
-              styles.createInput,
-              {
-                height: undefined,
-                minHeight: 46,
-                paddingVertical: 10,
-                justifyContent: "center",
-                borderWidth: 1,
-                borderColor: t.border,
-                borderRadius: 10,
-              },
-            ]}
-          >
-            <Text
-              style={{ fontSize: 14, color: pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
-              numberOfLines={1}
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 9 }}>
+            <Pressable
+              onPress={() => setShowPlaceSearch(true)}
+              style={[
+                styles.createInput,
+                {
+                  flex: 1,
+                  marginTop: 0,
+                  height: undefined,
+                  minHeight: 46,
+                  paddingVertical: 10,
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: pickupUndecided ? t.rose : t.border,
+                  borderRadius: 10,
+                },
+              ]}
             >
-              {pickupPlace
-                ? pickupPlace.isDefault
-                  ? `현위치: ${pickupPlace.address || pickupPlace.name}`
-                  : pickupPlace.name
-                : !locationAvailable
-                  ? "위치를 찾을 수 없어요. GPS를 확인해주세요."
-                  : "장소를 검색하세요"}
-            </Text>
-            {pickupPlace && !pickupPlace.isDefault && !!pickupPlace.address && pickupPlace.name !== pickupPlace.address && (
-              <Text style={{ fontSize: 11, color: t.muted, marginTop: 2 }} numberOfLines={1}>
-                {pickupPlace.address}
+              <Text
+                style={{ fontSize: 14, color: pickupUndecided ? t.muted : pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
+                numberOfLines={1}
+              >
+                {pickupUndecided
+                  ? "장소 미정"
+                  : pickupPlace
+                    ? pickupPlace.isDefault
+                      ? `현위치: ${pickupPlace.address || pickupPlace.name}`
+                      : pickupPlace.name
+                    : !locationAvailable
+                      ? "위치를 찾을 수 없어요. GPS를 확인해주세요."
+                      : "장소를 검색하세요"}
               </Text>
-            )}
-          </Pressable>
+              {!pickupUndecided && pickupPlace && !pickupPlace.isDefault && !!pickupPlace.address && pickupPlace.name !== pickupPlace.address && (
+                <Text style={{ fontSize: 11, color: t.muted, marginTop: 2 }} numberOfLines={1}>
+                  {pickupPlace.address}
+                </Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => onPickupUndecided(!pickupUndecided)}
+              style={{
+                height: 46,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: pickupUndecided ? t.rose : t.border,
+                backgroundColor: pickupUndecided ? t.roseSoft : "#fff",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: pickupUndecided ? t.rose : t.dim }}>
+                미정
+              </Text>
+            </Pressable>
+          </View>
 
           {/* 미니 맵 */}
-          {pickupPlace && <Pressable
+          {pickupPlace && !pickupUndecided && <Pressable
             onPress={() => setShowPlaceSearch(true)}
             style={{
               height: 130,
@@ -243,13 +279,44 @@ export function CreateScreen({
 
         <View>
           <Text style={styles.fieldLabel}>픽업 시간</Text>
-          <TextInput
-            value={time}
-            onChangeText={onTime}
-            placeholder="오늘 저녁 7시"
-            placeholderTextColor={t.dim}
-            style={styles.createInput}
-          />
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 9 }}>
+            <Pressable
+              onPress={openTimePicker}
+              style={[
+                styles.createInput,
+                {
+                  flex: 1,
+                  marginTop: 0,
+                  height: 46,
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: t.border,
+                  borderRadius: 10,
+                },
+              ]}
+            >
+              <Text style={{ fontSize: 14, color: timeDate ? t.ink : t.dim }}>
+                {timeDate ? formatPickupTime(timeDate) : "날짜 및 시간 선택"}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => timeDate !== null ? onTimeDate(null) : openTimePicker()}
+              style={{
+                height: 46,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: timeDate === null ? t.rose : t.border,
+                backgroundColor: timeDate === null ? t.roseSoft : "#fff",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: timeDate === null ? t.rose : t.dim }}>
+                미정
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         <View>
@@ -281,6 +348,13 @@ export function CreateScreen({
           setShowPlaceSearch(false);
         }}
         onClose={() => setShowPlaceSearch(false)}
+      />
+
+      <DateTimePickerModal
+        visible={showPicker}
+        value={pickerBase}
+        onConfirm={(date) => { onTimeDate(date); setShowPicker(false); }}
+        onCancel={() => setShowPicker(false)}
       />
     </View>
   );

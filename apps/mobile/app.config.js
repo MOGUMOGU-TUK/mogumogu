@@ -44,8 +44,9 @@ module.exports = ({ config }) => {
     },
     ios: {
       ...config.ios,
-      googleServicesFile:
-        process.env.GOOGLE_SERVICES_JSON_IOS ?? "./GoogleService-Info.plist",
+      ...(process.env.GOOGLE_SERVICES_JSON_IOS
+        ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON_IOS }
+        : {}),
     },
     plugins: [...(config.plugins ?? []), "expo-build-properties"],
   };
