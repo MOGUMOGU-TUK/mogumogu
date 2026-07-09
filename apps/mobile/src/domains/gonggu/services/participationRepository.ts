@@ -88,6 +88,7 @@ export async function joinGongguDoc(gongguId: string, user: User, quantity: numb
   const participation: Participation = {
     gongguId,
     userId: user.id,
+    nickname: user.nickname,
     status: "payment_confirmed",
     paymentStatus: "confirmed",
     pickupConfirmationStatus: "pending",

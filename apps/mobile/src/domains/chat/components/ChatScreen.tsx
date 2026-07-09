@@ -17,6 +17,7 @@ export function ChatScreen({
   onLeave,
   onComplete,
   onOpenDetail,
+  onReport,
 }: {
   deal: Deal;
   messages: ChatMsg[];
@@ -26,6 +27,7 @@ export function ChatScreen({
   onLeave: () => void;
   onComplete: () => void;
   onOpenDetail: () => void;
+  onReport: () => void;
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<ScrollView>(null);
@@ -60,6 +62,9 @@ export function ChatScreen({
               {memberStr(deal)} · {statusOf(deal)}
             </Text>
           </View>
+        </Pressable>
+        <Pressable onPress={onReport} style={{ padding: 4 }}>
+          <Text style={{ fontSize: 12, color: t.muted }}>신고</Text>
         </Pressable>
         {isHost && !["review_required", "completed", "canceled"].includes(deal.status) ? (
           <Pressable style={styles.chatLeaveBtn} onPress={onComplete}>

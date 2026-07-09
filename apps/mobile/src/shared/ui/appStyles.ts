@@ -431,6 +431,19 @@ export const styles = StyleSheet.create({
     color: t.ink
   },
   catChip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 11, borderWidth: 1 },
+  reportTextarea: {
+    marginTop: 8,
+    height: 96,
+    borderWidth: 1,
+    borderColor: t.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    fontSize: 14,
+    backgroundColor: "#fff",
+    color: t.ink,
+    textAlignVertical: "top"
+  },
   suffixField: {
     marginTop: 8,
     height: 46,
