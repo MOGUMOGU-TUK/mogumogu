@@ -56,12 +56,13 @@ export function HomeScreen({
                 return !open;
               })
             }
+            style={{ marginTop: 4 }}
           >
             <SearchIcon size={20} color={searchOpen ? t.rose : t.ink} />
           </Pressable>
           <View>
             <Pressable onPress={onBell}>
-              <BellIcon size={20} color={t.ink} />
+              <BellIcon size={23} color={t.ink} />
             </Pressable>
             {hasUnread && <View style={styles.bellDot} />}
           </View>
@@ -163,22 +164,27 @@ function SearchIcon({
   color?: string;
 }) {
   const s = size;
+  const d = s * 0.7;
   return (
-    <View
-      style={{
-        width: s,
-        height: s,
-        borderRadius: s / 2,
-        borderWidth: 2,
-        borderColor: color,
-      }}
-    >
+    <View style={{ width: s, height: s }}>
       <View
         style={{
           position: "absolute",
-          right: -s * 0.2,
-          bottom: -s * 0.2,
-          width: s * 0.42,
+          top: 0,
+          left: 0,
+          width: d,
+          height: d,
+          borderRadius: d / 2,
+          borderWidth: 2,
+          borderColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: "absolute",
+          left: s * 0.54,
+          top: s * 0.68,
+          width: s * 0.38,
           height: 2,
           borderRadius: 1,
           backgroundColor: color,
