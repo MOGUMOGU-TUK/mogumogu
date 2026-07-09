@@ -139,6 +139,11 @@ function formatDateLabel(date: Date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
 }
 
+function reviewTime(createdAt: string) {
+  const time = new Date(createdAt).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 function applyProfileDoc(
   profile: UserProfileDoc | null | undefined,
   setNickname: (nickname: string) => void,
@@ -538,7 +543,10 @@ export function AppShell() {
   );
 
   const receivedReviews = useMemo(
-    () => data.reviews.filter((review) => review.revieweeId === currentUser.id),
+    () =>
+      data.reviews
+        .filter((review) => review.revieweeId === currentUser.id)
+        .sort((a, b) => reviewTime(b.createdAt) - reviewTime(a.createdAt)),
     [currentUser.id, data.reviews],
   );
 
