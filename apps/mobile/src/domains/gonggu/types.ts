@@ -27,7 +27,7 @@ export type Deal = {
   spot: string;
   pickup: string;
   leader: string;
-  temp: number;
+  mannerScore: number;
   deals: number;
   reviews: number;
   noshow: number;

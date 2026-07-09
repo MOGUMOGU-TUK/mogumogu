@@ -454,6 +454,10 @@ export function AppShell() {
     }).filter((tag) => tag.count > 0);
 
     return {
+      mannerScore: Math.min(
+        100,
+        receivedReviews.reduce((sum, review) => sum + review.rating, 0),
+      ),
       completedDealCount: completedDeals.length,
       receivedReviewCount: receivedReviews.length,
       noshowCount: 0,
@@ -1028,6 +1032,7 @@ export function AppShell() {
               <MyPageScreen
                 nickname={currentUser.nickname}
                 locationLabel={verifiedLocationLabel}
+                mannerScore={myPageStats.mannerScore}
                 completedDealCount={myPageStats.completedDealCount}
                 receivedReviewCount={myPageStats.receivedReviewCount}
                 noshowCount={myPageStats.noshowCount}

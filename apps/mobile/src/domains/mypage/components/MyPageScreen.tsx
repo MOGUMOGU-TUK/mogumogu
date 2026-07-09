@@ -1,10 +1,16 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 
 import { t } from "../../../shared/theme/theme";
-import { TemperatureGradientBar as GradientBar } from "../../../shared/ui/TemperatureGradientBar";
+import { ProgressBar } from "../../../shared/ui/ProgressBar";
 import { Toggle } from "../../../shared/ui/Toggle";
 import { styles } from "../../../shared/ui/appStyles";
-import { tempRatio } from "../../gonggu/utils";
+import { getMannerLevel } from "../../../shared/utils/mannerLevel";
 import { NOTIF_ITEMS, type NotifKey } from "../../notifications/types";
 
 export type MyPageReviewTag = {
@@ -16,6 +22,7 @@ export type MyPageReviewTag = {
 export function MyPageScreen({
   nickname,
   locationLabel,
+  mannerScore,
   completedDealCount,
   receivedReviewCount,
   noshowCount,
@@ -28,6 +35,7 @@ export function MyPageScreen({
 }: {
   nickname: string;
   locationLabel: string;
+  mannerScore: number;
   completedDealCount: number;
   receivedReviewCount: number;
   noshowCount: number;
@@ -38,6 +46,8 @@ export function MyPageScreen({
   onOpenCompletedDeals: () => void;
   onReviewDemo: () => void;
 }) {
+  const manner = getMannerLevel(mannerScore);
+
   return (
     <ScrollView contentContainerStyle={styles.myBody}>
       <Text style={styles.myTitle}>마이페이지</Text>
@@ -79,18 +89,29 @@ export function MyPageScreen({
         </View>
 
         <View style={{ marginTop: 18 }}>
-          <View style={[styles.rowBetween, { marginBottom: 7 }]}>
+          <View style={[styles.rowBetween, { marginBottom: 10 }]}>
             <Text style={{ fontSize: 13, fontWeight: "700", color: t.ink }}>
-              매너온도
+              매너 단계
             </Text>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: t.rose }}>
-              37.4°C
+            <Text style={{ fontSize: 13, fontWeight: "700", color: t.rose }}>
+              {manner.level.name}
             </Text>
           </View>
-          <GradientBar ratio={tempRatio(37.4)} knobColor={t.rose} />
-          <Text style={{ fontSize: 11, color: t.muted, marginTop: 6 }}>
-            첫 온도 36.5°C에서 0.9°C 올랐어요
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Image
+              source={manner.level.image}
+              style={{ width: 64, height: 64 }}
+              resizeMode="contain"
+            />
+            <View style={{ flex: 1 }}>
+              <ProgressBar pct={manner.progress} />
+              <Text style={{ fontSize: 11, color: t.muted, marginTop: 6 }}>
+                {manner.remaining > 0
+                  ? `다음 단계까지 ${manner.remaining}점 남았어요`
+                  : "최고 단계에 도달했어요"}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
