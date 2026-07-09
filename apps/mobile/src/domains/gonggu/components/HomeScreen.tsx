@@ -6,6 +6,7 @@ import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 import { HOME_FILTERS, type Deal } from "../types";
 import { DealCard } from "./DealCard";
+import { MapPinIcon } from "../../../shared/ui/icons";
 
 type HomeScreenProps = {
   deals: Deal[];
@@ -39,13 +40,12 @@ export function HomeScreen({
       (filter === "전체" || deal.cat === filter) &&
       (q === "" || deal.title.toLowerCase().includes(q))
   );
-  const headerLocation = isLocationVerified ? `📍 ${locationLabel}` : locationLabel;
-
   return (
     <View style={styles.flex}>
       <View style={styles.homeHeader}>
         <Pressable style={styles.locButton} onPress={onLocationPress}>
-          <Text style={styles.locText}>{headerLocation}</Text>
+          {isLocationVerified && <MapPinIcon size={22} color={t.rose} />}
+          <Text style={styles.locText}>{locationLabel}</Text>
           <Text style={styles.chevron}>⌄</Text>
         </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
