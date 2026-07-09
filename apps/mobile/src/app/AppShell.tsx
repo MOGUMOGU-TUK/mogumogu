@@ -115,6 +115,12 @@ const REVIEW_TAG_DEFS: Array<
     keys: ["desc", "description", "상품 설명", "설명"],
   },
 ];
+const REVIEW_TAG_LABELS: Record<ReviewKey, string> = {
+  time: "시간 약속",
+  fair: "소분",
+  manner: "소통 매너",
+  desc: "상품 설명",
+};
 
 function formatDateLabel(date: Date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
@@ -233,7 +239,7 @@ export function AppShell() {
 
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
-    () => data.gonggus.map((g) => gongguToUi(g, data.reviews)),
+    () => data.gonggus.map((g) => gongguToUi(g, data.reviews, data.gonggus)),
     [data.gonggus, data.reviews],
   );
 
@@ -494,7 +500,13 @@ export function AppShell() {
         return true;
       }
       if (screen === "detail") {
-        go(detailFrom === "notifications" ? "notifications" : tab);
+        if (detailFrom === "notifications") {
+          go("notifications");
+        } else if (detailFrom === "completedDeals") {
+          go("completedDeals", "mypage");
+        } else {
+          go(tab);
+        }
         return true;
       }
       if (screen === "create" || screen === "review") {
@@ -750,11 +762,15 @@ export function AppShell() {
     if (gonggu && isFirebaseConfigured()) {
       try {
         const avg = Object.values(ratings).reduce((a, b) => a + b, 0) / 4;
+        const tags = Object.entries(ratings)
+          .filter(([, value]) => value >= 4)
+          .map(([key]) => REVIEW_TAG_LABELS[key as ReviewKey]);
         await submitReviewDoc(
           gonggu,
           currentUser,
           Math.round(avg) || 3,
           comment,
+          tags,
         );
       } catch {
         /* 실패해도 화면 전환은 진행 */
@@ -944,9 +960,15 @@ export function AppShell() {
                 hearted={hearts.includes(sel.id)}
                 joined={joined.includes(sel.id)}
                 isHost={sel.hostId === currentUser.id}
-                onBack={() =>
-                  go(detailFrom === "notifications" ? "notifications" : tab)
-                }
+                onBack={() => {
+                  if (detailFrom === "notifications") {
+                    go("notifications");
+                  } else if (detailFrom === "completedDeals") {
+                    go("completedDeals", "mypage");
+                  } else {
+                    go(tab);
+                  }
+                }}
                 onHeart={() =>
                   setHearts((prev) =>
                     prev.includes(sel.id)
@@ -1083,6 +1105,11 @@ export function AppShell() {
                     : "거래가 완료되면 이곳에서 다시 확인할 수 있어요."
                 }
                 onBack={() => go("mypage", "mypage")}
+                onOpen={
+                  completedDealsMode === "view"
+                    ? (deal) => openDeal(deal.id)
+                    : undefined
+                }
                 onSelect={
                   completedDealsMode === "review"
                     ? startReviewFromCompletedDeal

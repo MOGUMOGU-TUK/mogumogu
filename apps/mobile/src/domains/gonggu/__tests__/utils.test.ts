@@ -115,13 +115,24 @@ describe("gongguToUi", () => {
     });
   });
 
-  it("해당 공구의 후기 수만 센다", () => {
+  it("공구장 기준 받은 후기와 완료 거래 수를 센다", () => {
     const reviews = [
-      { gongguId: "g1" },
-      { gongguId: "g1" },
-      { gongguId: "other" },
+      { gongguId: "g1", revieweeId: "host1", rating: 4 },
+      { gongguId: "other", revieweeId: "host1", rating: 5 },
+      { gongguId: "g1", revieweeId: "other-host", rating: 5 },
     ] as Review[];
-    expect(gongguToUi(gonggu({ id: "g1" }), reviews).reviews).toBe(2);
+    const gonggus = [
+      gonggu({ id: "g1", hostUserId: "host1", status: "recruiting" }),
+      gonggu({ id: "g2", hostUserId: "host1", status: "review_required" }),
+      gonggu({ id: "g3", hostUserId: "host1", status: "completed" }),
+      gonggu({ id: "g4", hostUserId: "other-host", status: "completed" }),
+    ];
+
+    expect(gongguToUi(gonggus[0]!, reviews, gonggus)).toMatchObject({
+      deals: 2,
+      reviews: 2,
+      mannerScore: 9,
+    });
   });
 
   it("거리 0이면 '근처'로 표시한다", () => {
