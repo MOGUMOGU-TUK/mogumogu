@@ -12,6 +12,7 @@ export function CompletedDealsScreen({
   title = "완료된 거래",
   emptyTitle = "완료된 거래가 없어요",
   emptyDesc = "거래가 완료되면 이곳에서 다시 확인할 수 있어요.",
+  statusLabel = "거래 완료",
   onBack,
   onOpen,
   onSelect,
@@ -21,6 +22,7 @@ export function CompletedDealsScreen({
   title?: string;
   emptyTitle?: string;
   emptyDesc?: string;
+  statusLabel?: string;
   onBack: () => void;
   onOpen?: (deal: Deal) => void;
   onSelect?: (deal: Deal) => void;
@@ -72,7 +74,7 @@ export function CompletedDealsScreen({
                         color: t.greenInk,
                       }}
                     >
-                      거래 완료
+                      {statusLabel}
                     </Text>
                     <Text style={{ fontSize: 11, color: t.dim }}>
                       {isHost ? "공구장" : "참여자"}

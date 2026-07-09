@@ -135,6 +135,12 @@ describe("gongguToUi", () => {
     });
   });
 
+  it("공구장 노쇼 수를 Deal에 반영한다", () => {
+    expect(gongguToUi(gonggu({}), [], undefined, 3)).toMatchObject({
+      noshow: 3,
+    });
+  });
+
   it("거리 0이면 '근처'로 표시한다", () => {
     expect(gongguToUi(gonggu({ pickupDistanceMeters: 0 }), []).dist).toBe("근처");
   });

@@ -24,7 +24,11 @@ import {
   type VerifiedLocation
 } from "../domains/location/services/verifyNeighborhood";
 import { sendMessageDoc } from "../domains/chat/services/chatRepository";
-import { submitReportDoc } from "../domains/chat/services/reportRepository";
+import {
+  loadUserStatsDoc,
+  submitReportDoc,
+  type UserStatsDoc,
+} from "../domains/chat/services/reportRepository";
 import { reverseGeocode } from "../domains/map/services/kakaoGeo";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
@@ -197,6 +201,7 @@ export function AppShell() {
   const [notif, setNotif] = useState<NotifSettings>(DEFAULT_NOTIF_SETTINGS);
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
   const [dismissedReviewIds, setDismissedReviewIds] = useState<string[]>([]);
+  const [userStatsById, setUserStatsById] = useState<Record<string, UserStatsDoc>>({});
 
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
@@ -249,10 +254,45 @@ export function AppShell() {
       .finally(() => setProfileLoaded(true));
   }, [auth.user?.uid]);
 
+  useEffect(() => {
+    const uid = auth.user?.uid;
+    if (!uid || auth.user?.isAnonymous || !isFirebaseConfigured()) {
+      setUserStatsById({});
+      return;
+    }
+
+    let active = true;
+    const targetUserIds = Array.from(
+      new Set([uid, ...data.gonggus.map((gonggu) => gonggu.hostUserId)]),
+    );
+
+    void Promise.all(
+      targetUserIds.map(async (targetUserId) => {
+        const stats = await loadUserStatsDoc(targetUserId).catch(() => null);
+        return [targetUserId, stats ?? {}] as const;
+      }),
+    ).then((entries) => {
+      if (!active) return;
+      setUserStatsById(Object.fromEntries(entries));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [auth.user?.uid, auth.user?.isAnonymous, data.gonggus]);
+
   /* ── 도메인 → UI 어댑터 ── */
   const deals = useMemo(
-    () => data.gonggus.map((g) => gongguToUi(g, data.reviews, data.gonggus)),
-    [data.gonggus, data.reviews],
+    () =>
+      data.gonggus.map((g) =>
+        gongguToUi(
+          g,
+          data.reviews,
+          data.gonggus,
+          userStatsById[g.hostUserId]?.noshowCount ?? 0,
+        ),
+      ),
+    [data.gonggus, data.reviews, userStatsById],
   );
 
   const feedDeals = useMemo(
@@ -477,6 +517,14 @@ export function AppShell() {
     [deals, data.participations, currentUser.id],
   );
 
+  const currentUserStats = userStatsById[currentUser.id];
+
+  const noshowDeals = useMemo(() => {
+    const noshowIds = new Set(currentUserStats?.noshowGongguIds ?? []);
+    if (noshowIds.size === 0) return [];
+    return deals.filter((deal) => noshowIds.has(deal.id));
+  }, [currentUserStats?.noshowGongguIds, deals]);
+
   const myPageStats = useMemo(() => {
     const receivedReviews = data.reviews.filter(
       (r) => r.revieweeId === currentUser.id,
@@ -502,10 +550,10 @@ export function AppShell() {
       ),
       completedDealCount: completedDeals.length,
       receivedReviewCount: receivedReviews.length,
-      noshowCount: 0,
+      noshowCount: currentUserStats?.noshowCount ?? 0,
       reviewTags,
     };
-  }, [completedDeals.length, currentUser.id, data.reviews]);
+  }, [completedDeals.length, currentUser.id, currentUserStats?.noshowCount, data.reviews]);
 
   useEffect(() => {
     return () => {
@@ -544,6 +592,8 @@ export function AppShell() {
           go("notifications");
         } else if (detailFrom === "completedDeals") {
           go("completedDeals", "mypage");
+        } else if (detailFrom === "noshowDeals") {
+          go("noshowDeals", "mypage");
         } else {
           go(tab);
         }
@@ -561,7 +611,7 @@ export function AppShell() {
         go("home", "home");
         return true;
       }
-      if (screen === "completedDeals") {
+      if (screen === "completedDeals" || screen === "noshowDeals") {
         go("mypage", "mypage");
         return true;
       }
@@ -598,6 +648,10 @@ export function AppShell() {
   function openCompletedDeals(mode: "view" | "review") {
     setCompletedDealsMode(mode);
     setScreen("completedDeals");
+  }
+
+  function openNoshowDeals() {
+    setScreen("noshowDeals");
   }
 
   function startReviewFromCompletedDeal(deal: Deal) {
@@ -726,6 +780,13 @@ export function AppShell() {
         reporterId: currentUser.id,
         ...payload,
       });
+      if (payload.category === "noshow") {
+        const nextStats = await loadUserStatsDoc(payload.targetUserId).catch(() => null);
+        setUserStatsById((prev) => ({
+          ...prev,
+          [payload.targetUserId]: nextStats ?? {},
+        }));
+      }
     } catch {
       showToast("신고 접수 중 오류가 발생했어요. 다시 시도해주세요.");
       return;
@@ -1077,6 +1138,8 @@ export function AppShell() {
                     go("notifications");
                   } else if (detailFrom === "completedDeals") {
                     go("completedDeals", "mypage");
+                  } else if (detailFrom === "noshowDeals") {
+                    go("noshowDeals", "mypage");
                   } else {
                     go(tab);
                   }
@@ -1176,6 +1239,7 @@ export function AppShell() {
                 onToggle={toggleNotif}
                 onEditProfile={() => setScreen("profileEdit")}
                 onOpenCompletedDeals={() => openCompletedDeals("view")}
+                onOpenNoshowDeals={openNoshowDeals}
                 onReviewDemo={() => openCompletedDeals("review")}
               />
             )}
@@ -1228,6 +1292,19 @@ export function AppShell() {
                     ? startReviewFromCompletedDeal
                     : undefined
                 }
+              />
+            )}
+
+            {screen === "noshowDeals" && (
+              <CompletedDealsScreen
+                deals={noshowDeals}
+                meId={currentUser.id}
+                title="노쇼 신고된 공구"
+                emptyTitle="노쇼 신고된 공구가 없어요"
+                emptyDesc="노쇼로 신고된 공구가 있으면 이곳에서 확인할 수 있어요."
+                statusLabel="노쇼 신고"
+                onBack={() => go("mypage", "mypage")}
+                onOpen={(deal) => openDeal(deal.id)}
               />
             )}
 

@@ -31,6 +31,7 @@ export function MyPageScreen({
   onToggle,
   onEditProfile,
   onOpenCompletedDeals,
+  onOpenNoshowDeals,
   onReviewDemo,
 }: {
   nickname: string;
@@ -44,6 +45,7 @@ export function MyPageScreen({
   onToggle: (key: NotifKey) => void;
   onEditProfile: () => void;
   onOpenCompletedDeals: () => void;
+  onOpenNoshowDeals: () => void;
   onReviewDemo: () => void;
 }) {
   const manner = getMannerLevel(mannerScore);
@@ -122,7 +124,12 @@ export function MyPageScreen({
           onPress={onOpenCompletedDeals}
         />
         <StatCard value={String(receivedReviewCount)} label="받은 후기" />
-        <StatCard value={String(noshowCount)} label="노쇼" valueColor={t.greenInk} />
+        <StatCard
+          value={String(noshowCount)}
+          label="노쇼"
+          valueColor={t.greenInk}
+          onPress={onOpenNoshowDeals}
+        />
       </View>
 
       <Text style={styles.mySection}>이웃이 남긴 후기</Text>

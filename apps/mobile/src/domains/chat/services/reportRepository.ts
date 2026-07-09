@@ -1,10 +1,11 @@
 import {
+  addDoc,
   arrayUnion,
   collection,
   doc,
   getDoc,
   increment,
-  writeBatch,
+  setDoc,
 } from "firebase/firestore";
 
 import type { ReportCategory, ReportTargetRole } from "../../../types/domain";
@@ -50,20 +51,23 @@ export async function submitReportDoc(input: ReportInput): Promise<void> {
   }
   const { db } = services;
 
-  const batch = writeBatch(db);
-  batch.set(doc(collection(db, REPORTS)), {
+  await addDoc(collection(db, REPORTS), {
     ...input,
     createdAt: new Date().toISOString(),
   });
+
   if (input.category === "noshow") {
-    batch.set(
-      doc(db, USER_STATS, input.targetUserId),
-      {
-        noshowCount: increment(1),
-        noshowGongguIds: arrayUnion(input.gongguId),
-      },
-      { merge: true },
-    );
+    try {
+      await setDoc(
+        doc(db, USER_STATS, input.targetUserId),
+        {
+          noshowCount: increment(1),
+          noshowGongguIds: arrayUnion(input.gongguId),
+        },
+        { merge: true },
+      );
+    } catch (error) {
+      console.warn("노쇼 통계 갱신에 실패했어요.", error);
+    }
   }
-  await batch.commit();
 }

@@ -29,6 +29,10 @@ type NotifItemShape = {
 const NOTIFICATIONS = "notifications";
 const ITEMS = "items";
 
+function isNotifSettingKey(type: string): type is keyof NotifSettings {
+  return type === "join" || type === "full" || type === "deadline" || type === "chat";
+}
+
 export async function writeNotifDoc(
   userId: string,
   notif: { type: string; title: string; body: string; gongguId?: string }
@@ -36,6 +40,13 @@ export async function writeNotifDoc(
   const services = getFirebaseServices();
   if (!services) return;
   try {
+    if (isNotifSettingKey(notif.type)) {
+      const userSnap = await getDoc(doc(services.db, "users", userId));
+      const userSettings = userSnap.data()?.notifSettings as Partial<NotifSettings> | undefined;
+      const settings = { ...DEFAULT_NOTIF_SETTINGS, ...userSettings };
+      if (!settings[notif.type]) return;
+    }
+
     await addDoc(collection(services.db, NOTIFICATIONS, userId, ITEMS), {
       ...notif,
       read: false,
