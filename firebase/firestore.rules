@@ -90,6 +90,11 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    match /userStats/{userId} {
+      // POC: 노쇼 신고 시 신고자가 대상 유저의 집계 카운트를 직접 갱신
+      allow read, write: if signedIn();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

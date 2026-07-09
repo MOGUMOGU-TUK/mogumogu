@@ -24,6 +24,7 @@ import {
   type VerifiedLocation
 } from "../domains/location/services/verifyNeighborhood";
 import { sendMessageDoc } from "../domains/chat/services/chatRepository";
+import { submitReportDoc } from "../domains/chat/services/reportRepository";
 import { reverseGeocode } from "../domains/map/services/kakaoGeo";
 import { isFirebaseConfigured } from "../services/firebase/client";
 import {
@@ -59,6 +60,10 @@ import { JoinSheet as GongguJoinSheet } from "../domains/gonggu/components/JoinS
 import { VerifyScreen } from "../domains/location/components/VerifyScreen";
 import { ChatListScreen } from "../domains/chat/components/ChatListScreen";
 import { ChatScreen } from "../domains/chat/components/ChatScreen";
+import {
+  ReportSheet,
+  type ReportableMember,
+} from "../domains/chat/components/ReportSheet";
 import { MapScreen } from "../domains/map/components/MapScreen";
 import { CompletedDealsScreen } from "../domains/mypage/components/CompletedDealsScreen";
 import {
@@ -80,7 +85,7 @@ import { chatMsgFromDomain, SEED_MSGS } from "../domains/chat/utils";
 import type { Deal } from "../domains/gonggu/types";
 import { DEFAULT_RECRUITMENT_DEADLINE_LABEL, gongguToUi } from "../domains/gonggu/utils";
 import { isWithinRadiusKm } from "../domains/location/services/geo";
-import type { User } from "../types/domain";
+import type { ReportCategory, ReportTargetRole, User } from "../types/domain";
 import { ConfirmSheet, type ConfirmState } from "../shared/ui/ConfirmSheet";
 import { EmptyState } from "../shared/ui/EmptyState";
 import { t } from "../shared/theme/theme";
@@ -160,6 +165,7 @@ export function AppShell() {
   const [joined, setJoined] = useState<string[]>([]);
   const [hearts, setHearts] = useState<string[]>([]);
   const [showJoin, setShowJoin] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState("");
   const [completedDealsMode, setCompletedDealsMode] = useState<"view" | "review">("view");
@@ -391,6 +397,21 @@ export function AppShell() {
     () => deals.find((d) => d.id === selectedId) ?? feedDeals[0] ?? null,
     [deals, feedDeals, selectedId],
   );
+  /* 현재 채팅방에서 신고 대상으로 고를 수 있는 사람들 (나 자신 제외) */
+  const reportableMembers = useMemo<ReportableMember[]>(() => {
+    if (!sel) return [];
+    const members: ReportableMember[] = [
+      { id: sel.hostId, nickname: sel.leader, role: "host" },
+      ...data.participations
+        .filter((p) => p.gongguId === sel.id)
+        .map((p) => ({
+          id: p.userId,
+          nickname: p.nickname || "참여자",
+          role: "participant" as const,
+        })),
+    ];
+    return members.filter((m) => m.id !== currentUser.id);
+  }, [sel, data.participations, currentUser.id]);
   const mapPick = useMemo(
     () => mapDeals.find((d) => d.id === mapSel) ?? mapDeals[0] ?? null,
     [mapDeals, mapSel],
@@ -509,6 +530,10 @@ export function AppShell() {
         setShowJoin(false);
         return true;
       }
+      if (showReport) {
+        setShowReport(false);
+        return true;
+      }
       if (screen === "verify") {
         skipSocialAutoVerifyRef.current = true;
         setScreen("login");
@@ -551,7 +576,7 @@ export function AppShell() {
       return false; // login / home → 시스템이 처리 (앱 종료)
     });
     return () => sub.remove();
-  }, [screen, tab, showJoin, confirm]);
+  }, [screen, tab, showJoin, showReport, confirm]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -681,6 +706,31 @@ export function AppShell() {
         showToast("거래완료! 참여자들에게 후기 안내를 보냈어요");
       },
     });
+  }
+
+  async function submitReport(payload: {
+    targetUserId: string;
+    targetRole: ReportTargetRole;
+    category: ReportCategory;
+    detail: string;
+  }) {
+    if (!sel) return;
+    setShowReport(false);
+    if (!isFirebaseConfigured()) {
+      showToast("Firebase 설정이 필요해요.");
+      return;
+    }
+    try {
+      await submitReportDoc({
+        gongguId: sel.id,
+        reporterId: currentUser.id,
+        ...payload,
+      });
+    } catch {
+      showToast("신고 접수 중 오류가 발생했어요. 다시 시도해주세요.");
+      return;
+    }
+    showToast("신고가 접수됐어요.");
   }
 
   async function confirmJoin(quantity: number) {
@@ -1066,6 +1116,7 @@ export function AppShell() {
                   onLeave={() => leaveRoom(sel)}
                   onComplete={() => completeGonggu(sel)}
                   onOpenDetail={() => openDeal(sel.id)}
+                  onReport={() => setShowReport(true)}
                 />
               ) : (
                 <EmptyState
@@ -1216,6 +1267,14 @@ export function AppShell() {
               deal={sel}
               onClose={() => setShowJoin(false)}
               onConfirm={confirmJoin}
+            />
+          )}
+
+          {showReport && sel && (
+            <ReportSheet
+              members={reportableMembers}
+              onClose={() => setShowReport(false)}
+              onSubmit={submitReport}
             />
           )}
 

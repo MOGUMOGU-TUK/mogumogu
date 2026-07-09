@@ -77,6 +77,8 @@ export type Gonggu = {
 export type Participation = {
   gongguId: string;
   userId: string;
+  /** 참여 시점의 닉네임 스냅샷 (신고 대상 표시 등에 사용, 과거 참여 문서엔 없을 수 있음). */
+  nickname?: string;
   status: ParticipationStatus;
   paymentStatus: PaymentStatus;
   pickupConfirmationStatus: "pending" | "confirmed";
@@ -120,6 +122,20 @@ export type Review = {
   rating: number;
   tags: string[];
   comment: string;
+  createdAt: string;
+};
+
+export type ReportTargetRole = "host" | "participant";
+export type ReportCategory = "noshow" | "manner" | "fraud" | "other";
+
+export type Report = {
+  id: string;
+  gongguId: string;
+  reporterId: string;
+  targetUserId: string;
+  targetRole: ReportTargetRole;
+  category: ReportCategory;
+  detail: string;
   createdAt: string;
 };
 
