@@ -1,28 +1,34 @@
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { t } from "../../../shared/theme/theme";
 import { styles } from "../../../shared/ui/appStyles";
 
 export function ProfileEditScreen({
   nickname,
+  profileImageUrl,
   locationLabel,
   canChangeNickname,
   nextNicknameChangeDate,
   locationLoading,
+  imageUploading,
   locationError,
   onBack,
   onSave,
+  onChangeProfileImage,
   onFindNeighborhood,
 }: {
   nickname: string;
+  profileImageUrl?: string | null;
   locationLabel: string;
   canChangeNickname: boolean;
   nextNicknameChangeDate: string | null;
   locationLoading: boolean;
+  imageUploading: boolean;
   locationError: string | null;
   onBack: () => void;
   onSave: (nickname: string) => void;
+  onChangeProfileImage: () => void;
   onFindNeighborhood: () => void;
 }) {
   const [draftNickname, setDraftNickname] = useState(nickname);
@@ -40,6 +46,34 @@ export function ProfileEditScreen({
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20, gap: 18 }}>
+        <View style={{ alignItems: "center" }}>
+          <View style={styles.profileEditAvatar}>
+            {profileImageUrl ? (
+              <Image
+                source={{ uri: profileImageUrl }}
+                style={styles.profileEditAvatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={{ fontSize: 28, fontWeight: "800", color: t.rose }}>
+                {nickname.charAt(0)}
+              </Text>
+            )}
+          </View>
+          <Pressable
+            disabled={imageUploading}
+            onPress={onChangeProfileImage}
+            style={[
+              styles.editButton,
+              { marginTop: 12, opacity: imageUploading ? 0.6 : 1 },
+            ]}
+          >
+            <Text style={{ fontSize: 13, fontWeight: "700", color: t.chipInk }}>
+              {imageUploading ? "사진 업로드 중..." : "사진 변경"}
+            </Text>
+          </Pressable>
+        </View>
+
         <View>
           <Text style={styles.fieldLabel}>닉네임</Text>
           <TextInput
