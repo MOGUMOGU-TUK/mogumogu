@@ -21,8 +21,10 @@ type CreateScreenProps = {
   onTitle: (v: string) => void;
   total: string;
   qty: string;
+  qtyUnit: string;
   onTotal: (v: string) => void;
   onQty: (v: string) => void;
+  onQtyUnit: (v: string) => void;
   pickupPlace: PickupPlace | null;
   pickupUndecided: boolean;
   onPickupPlace: (place: PickupPlace) => void;
@@ -44,8 +46,10 @@ export function CreateScreen({
   onTitle,
   total,
   qty,
+  qtyUnit,
   onTotal,
   onQty,
+  onQtyUnit,
   pickupPlace,
   pickupUndecided,
   onPickupPlace,
@@ -62,8 +66,18 @@ export function CreateScreen({
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
   const pickupReady = pickupUndecided || !!pickupPlace;
   const timeReady = timeUndecided || !!timeDate;
-  const canPost = pickupReady && timeReady;
+  const canPost =
+    title.trim().length > 0 &&
+    cat.length > 0 &&
+    Number(total) > 0 &&
+    Number(qty) > 0 &&
+    qtyUnit.trim().length > 0 &&
+    pickupReady &&
+    timeReady;
+  const PRESET_UNITS = ["개", "g", "kg", "mL", "L"];
+  const isCustomUnit = !PRESET_UNITS.includes(qtyUnit);
   const [showPlaceSearch, setShowPlaceSearch] = useState(false);
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
   const miniMapRef = useRef<WebView>(null);
 
   const [showPicker, setShowPicker] = useState(false);
@@ -166,7 +180,7 @@ export function CreateScreen({
               <Text style={styles.suffix}>원</Text>
             </View>
           </View>
-          <View style={{ width: 108 }}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>총 수량</Text>
             <View style={styles.suffixField}>
               <TextInput
@@ -175,14 +189,52 @@ export function CreateScreen({
                 keyboardType="number-pad"
                 style={styles.suffixInput}
               />
-              <Text style={styles.suffix}>개</Text>
+              <Pressable
+                onPress={() => setShowUnitDropdown((v) => !v)}
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Text style={styles.suffix}>{qtyUnit}</Text>
+                <Text style={{ fontSize: 22, color: t.chipInk }}>▾</Text>
+              </Pressable>
             </View>
+            {showUnitDropdown && (
+              <View style={{ position: "absolute", top: 78, right: 0, backgroundColor: "#fff", borderWidth: 1, borderColor: t.border, borderRadius: 8, zIndex: 100, minWidth: 70, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
+                {[...PRESET_UNITS, "기타"].map((u) => (
+                  <Pressable
+                    key={u}
+                    onPress={() => {
+                      if (u === "기타") {
+                        onQtyUnit("");
+                      } else {
+                        onQtyUnit(u);
+                      }
+                      setShowUnitDropdown(false);
+                    }}
+                    style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: (u === "기타" ? isCustomUnit : qtyUnit === u) ? t.roseSoft : "#fff", borderRadius: 8 }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: (u === "기타" ? isCustomUnit : qtyUnit === u) ? "700" : "400", color: (u === "기타" ? isCustomUnit : qtyUnit === u) ? t.rose : t.ink }}>
+                      {u}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {isCustomUnit && (
+              <TextInput
+                value={qtyUnit}
+                onChangeText={onQtyUnit}
+                placeholder="단위 입력 (예: 봉지)"
+                placeholderTextColor={t.dim}
+                style={[styles.createInput, { marginTop: 6, height: 40, fontSize: 14 }]}
+                autoFocus
+              />
+            )}
           </View>
         </View>
 
         <View style={styles.perPersonBox}>
           <Text style={{ fontSize: 13, fontWeight: "600", color: t.roseInk }}>
-            1개당 가격
+            1{qtyUnit}당 가격
           </Text>
           <Text style={{ fontSize: 20, fontWeight: "800", color: t.rose }}>
             {perUnit}
@@ -204,13 +256,13 @@ export function CreateScreen({
                   paddingVertical: 10,
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: pickupUndecided ? t.rose : t.border,
+                  borderColor: t.border,
                   borderRadius: 10,
                 },
               ]}
             >
               <Text
-                style={{ fontSize: 14, color: pickupUndecided ? t.muted : pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
+                style={{ fontSize: 14, color: pickupUndecided ? t.ink : pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
                 numberOfLines={1}
               >
                 {pickupUndecided
@@ -348,7 +400,7 @@ export function CreateScreen({
         <View>
           <Text style={styles.fieldLabel}>소분 방법</Text>
           <TextInput
-            placeholder="예) 1인 4개씩 나눠가져요"
+            placeholder="예) 지퍼백에 나눠 담아드려요"
             placeholderTextColor={t.dim}
             style={styles.createInput}
           />

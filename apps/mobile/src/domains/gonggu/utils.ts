@@ -50,6 +50,7 @@ export function gongguToUi(
     total: g.totalPrice,
     cur: g.claimedQuantity,
     max: g.totalQuantity,
+    qtyUnit: g.qtyUnit ?? "개",
     members: g.currentParticipants,
     dist: g.pickupDistanceMeters > 0 ? `${g.pickupDistanceMeters}m` : "근처",
     pickupLatitude: g.pickupLatitude,
@@ -90,11 +91,11 @@ export function formatPickupTime(d: Date): string {
 export const unitPrice = (d: Deal) => Math.ceil(d.total / Math.max(1, d.max));
 
 /** 수량 진행 표시 (확보/총) */
-export const qtyStr = (d: Deal) => `${d.cur}/${d.max}개`;
+export const qtyStr = (d: Deal) => `${d.cur}/${d.max}${d.qtyUnit}`;
 
 export const memberStr = (d: Deal) => `참여 ${d.members}명`;
 export const barPct = (d: Deal) => Math.round((d.cur / Math.max(1, d.max)) * 100);
-export const remain = (d: Deal) => `앞으로 ${Math.max(0, d.max - d.cur)}개`;
+export const remain = (d: Deal) => `앞으로 ${Math.max(0, d.max - d.cur)}${d.qtyUnit}`;
 export const statusOf = (d: Deal) => (d.cur >= d.max ? "모집완료" : "모집중");
 export const tempStr = (n: number) => `${n.toFixed(1)}°C`;
 

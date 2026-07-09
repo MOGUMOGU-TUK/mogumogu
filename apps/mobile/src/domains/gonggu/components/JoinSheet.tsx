@@ -37,11 +37,11 @@ export function JoinSheet({ deal, onClose, onConfirm }: JoinSheetProps) {
               총 가격 · 총 수량
             </Text>
             <Text style={{ fontSize: 14, fontWeight: "600", color: t.ink }}>
-              {fmt(deal.total)} · {deal.max}개
+              {fmt(deal.total)} · {deal.max}{deal.qtyUnit}
             </Text>
           </View>
           <View style={styles.rowBetween}>
-            <Text style={{ fontSize: 14, color: t.chipInk }}>1개당 가격</Text>
+            <Text style={{ fontSize: 14, color: t.chipInk }}>1{deal.qtyUnit}당 가격</Text>
             <Text style={{ fontSize: 14, fontWeight: "600", color: t.ink }}>
               {fmt(price)}
             </Text>

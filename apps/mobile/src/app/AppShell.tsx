@@ -193,10 +193,11 @@ export function AppShell() {
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
-  const [createCat, setCreateCat] = useState("식품");
+  const [createCat, setCreateCat] = useState("");
   const [cTitle, setCTitle] = useState("");
   const [cTotal, setCTotal] = useState("");
-  const [cQty, setCQty] = useState("10");
+  const [cQty, setCQty] = useState("");
+  const [cQtyUnit, setCQtyUnit] = useState("개");
   const [cPickupPlace, setCPickupPlace] = useState<PickupPlace | null>(null);
   const [cPickupUndecided, setCPickupUndecided] = useState(false);
   const [cTimeDate, setCTimeDate] = useState<Date | null>(null);
@@ -869,6 +870,7 @@ export function AppShell() {
       category: createCat,
       totalPrice: Number(cTotal) || 0,
       totalQuantity: Number(cQty) || 1,
+      qtyUnit: cQtyUnit,
       pickupPlaceName: cPickupUndecided ? "장소 미정" : (cPickupPlace?.name ?? "장소 미정"),
       pickupExpectedTime: cTimeUndecided ? "시간 미정" : formatPickupTime(cTimeDate!),
       splitMethod: "수량 기준 비례 분담",
@@ -901,8 +903,10 @@ export function AppShell() {
     }
 
     setCTitle("");
+    setCreateCat("");
     setCTotal("");
-    setCQty("10");
+    setCQty("");
+    setCQtyUnit("개");
     setCPickupPlace(null);
     setCPickupUndecided(false);
     setCTimeDate(null);
@@ -1273,8 +1277,10 @@ export function AppShell() {
                 onTitle={setCTitle}
                 total={cTotal}
                 qty={cQty}
+                qtyUnit={cQtyUnit}
                 onTotal={setCTotal}
                 onQty={setCQty}
+                onQtyUnit={setCQtyUnit}
                 pickupPlace={cPickupPlace}
                 pickupUndecided={cPickupUndecided}
                 onPickupPlace={(place) => { setCPickupPlace(place); setCPickupUndecided(false); }}

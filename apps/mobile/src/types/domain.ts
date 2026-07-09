@@ -49,8 +49,10 @@ export type Gonggu = {
   hostTrustScore: number;
   purchaseStore: string;
   totalPrice: number;
-  /** 공구 총 수량(개). 단가 = totalPrice / totalQuantity. */
+  /** 공구 총 수량. 단가 = totalPrice / totalQuantity. */
   totalQuantity: number;
+  /** 수량 단위 (개, g, kg, mL, L) */
+  qtyUnit?: string;
   /** 참여자들이 지금까지 확보한 수량 합계. 진행률·모집완료의 기준. */
   claimedQuantity: number;
   /** 참여한 사람 수(참고용 표시). */
