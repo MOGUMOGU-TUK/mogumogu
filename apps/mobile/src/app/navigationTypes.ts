@@ -11,6 +11,7 @@ export type Screen =
   | "mypage"
   | "profileEdit"
   | "completedDeals"
+  | "noshowDeals"
   | "notifications";
 
 export type MainTab = "home" | "map" | "chat" | "mypage";

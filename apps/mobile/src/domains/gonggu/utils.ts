@@ -32,6 +32,7 @@ export function gongguToUi(
   g: Gonggu,
   reviews: Review[],
   gonggus: Gonggu[] = [g],
+  hostNoshowCount = 0,
 ): Deal {
   const hostReviews = reviews.filter((r) => r.revieweeId === g.hostUserId);
   const hostCompletedGonggus = gonggus.filter(
@@ -65,7 +66,7 @@ export function gongguToUi(
     ),
     deals: hostCompletedGonggus.length,
     reviews: hostReviews.length,
-    noshow: 0,
+    noshow: hostNoshowCount,
     tint: CATEGORY_TINTS[g.category] ?? "#EEE0E5",
     method: g.splitMethod,
     desc: g.description,
