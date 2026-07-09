@@ -1107,7 +1107,7 @@ export function AppShell() {
         translucent={false}
       />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
         <View style={[styles.root, Platform.OS === "web" && styles.rootWeb]}>
