@@ -241,6 +241,12 @@ export function CreateScreen({
             </Pressable>
           </View>
 
+          {pickupUndecided && (
+            <Text style={{ fontSize: 12, color: t.muted, marginTop: 6 }}>
+              픽업 장소는 채팅방에서 참여자들과 함께 정할 수 있어요
+            </Text>
+          )}
+
           {/* 미니 맵 */}
           {pickupPlace && !pickupUndecided && <Pressable
             onPress={() => setShowPlaceSearch(true)}
@@ -296,7 +302,7 @@ export function CreateScreen({
               ]}
             >
               <Text style={{ fontSize: 14, color: timeDate ? t.ink : t.dim }}>
-                {timeDate ? formatPickupTime(timeDate) : "날짜 및 시간 선택"}
+                {timeDate ? formatPickupTime(timeDate) : "시간 미정"}
               </Text>
             </Pressable>
             <Pressable
@@ -317,6 +323,12 @@ export function CreateScreen({
               </Text>
             </Pressable>
           </View>
+
+          {timeDate === null && (
+            <Text style={{ fontSize: 12, color: t.muted, marginTop: 6 }}>
+              픽업 시간은 채팅방에서 참여자들과 함께 정할 수 있어요
+            </Text>
+          )}
         </View>
 
         <View>
