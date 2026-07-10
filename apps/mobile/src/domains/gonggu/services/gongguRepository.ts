@@ -50,6 +50,7 @@ export type CreateGongguInput = {
   category: string;
   totalPrice: number;
   totalQuantity: number;
+  qtyUnit: string;
   pickupPlaceName: string;
   pickupLatitude?: number;
   pickupLongitude?: number;
@@ -89,6 +90,7 @@ export async function createGongguDoc(input: CreateGongguInput, host: User): Pro
     purchaseStore: "",
     totalPrice: input.totalPrice,
     totalQuantity,
+    qtyUnit: input.qtyUnit,
     claimedQuantity: 0,
     currentParticipants: 0,
     splitMethod: input.splitMethod,

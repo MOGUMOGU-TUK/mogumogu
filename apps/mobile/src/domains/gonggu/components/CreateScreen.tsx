@@ -21,14 +21,18 @@ type CreateScreenProps = {
   onTitle: (v: string) => void;
   total: string;
   qty: string;
+  qtyUnit: string;
   onTotal: (v: string) => void;
   onQty: (v: string) => void;
+  onQtyUnit: (v: string) => void;
   pickupPlace: PickupPlace | null;
   pickupUndecided: boolean;
   onPickupPlace: (place: PickupPlace) => void;
   onPickupUndecided: (v: boolean) => void;
   timeDate: Date | null;
   onTimeDate: (d: Date | null) => void;
+  timeUndecided: boolean;
+  onTimeUndecided: (v: boolean) => void;
   initialCenter?: { lat: number; lng: number };
   locationAvailable: boolean;
   onBack: () => void;
@@ -42,21 +46,38 @@ export function CreateScreen({
   onTitle,
   total,
   qty,
+  qtyUnit,
   onTotal,
   onQty,
+  onQtyUnit,
   pickupPlace,
   pickupUndecided,
   onPickupPlace,
   onPickupUndecided,
   timeDate,
   onTimeDate,
+  timeUndecided,
+  onTimeUndecided,
   initialCenter,
   locationAvailable,
   onBack,
   onPost,
 }: CreateScreenProps) {
   const perUnit = fmt(Math.ceil((Number(total) || 0) / (Number(qty) || 1)));
+  const pickupReady = pickupUndecided || !!pickupPlace;
+  const timeReady = timeUndecided || !!timeDate;
+  const canPost =
+    title.trim().length > 0 &&
+    cat.length > 0 &&
+    Number(total) > 0 &&
+    Number(qty) > 0 &&
+    qtyUnit.trim().length > 0 &&
+    pickupReady &&
+    timeReady;
+  const PRESET_UNITS = ["개", "g", "kg", "mL", "L"];
+  const isCustomUnit = !PRESET_UNITS.includes(qtyUnit);
   const [showPlaceSearch, setShowPlaceSearch] = useState(false);
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
   const miniMapRef = useRef<WebView>(null);
 
   const [showPicker, setShowPicker] = useState(false);
@@ -159,7 +180,7 @@ export function CreateScreen({
               <Text style={styles.suffix}>원</Text>
             </View>
           </View>
-          <View style={{ width: 108 }}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.fieldLabel}>총 수량</Text>
             <View style={styles.suffixField}>
               <TextInput
@@ -168,14 +189,52 @@ export function CreateScreen({
                 keyboardType="number-pad"
                 style={styles.suffixInput}
               />
-              <Text style={styles.suffix}>개</Text>
+              <Pressable
+                onPress={() => setShowUnitDropdown((v) => !v)}
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <Text style={styles.suffix}>{qtyUnit}</Text>
+                <Text style={{ fontSize: 22, color: t.chipInk }}>▾</Text>
+              </Pressable>
             </View>
+            {showUnitDropdown && (
+              <View style={{ position: "absolute", top: 78, right: 0, backgroundColor: "#fff", borderWidth: 1, borderColor: t.border, borderRadius: 8, zIndex: 100, minWidth: 70, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
+                {[...PRESET_UNITS, "기타"].map((u) => (
+                  <Pressable
+                    key={u}
+                    onPress={() => {
+                      if (u === "기타") {
+                        onQtyUnit("");
+                      } else {
+                        onQtyUnit(u);
+                      }
+                      setShowUnitDropdown(false);
+                    }}
+                    style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: (u === "기타" ? isCustomUnit : qtyUnit === u) ? t.roseSoft : "#fff", borderRadius: 8 }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: (u === "기타" ? isCustomUnit : qtyUnit === u) ? "700" : "400", color: (u === "기타" ? isCustomUnit : qtyUnit === u) ? t.rose : t.ink }}>
+                      {u}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {isCustomUnit && (
+              <TextInput
+                value={qtyUnit}
+                onChangeText={onQtyUnit}
+                placeholder="단위 입력 (예: 봉지)"
+                placeholderTextColor={t.dim}
+                style={[styles.createInput, { marginTop: 6, height: 40, fontSize: 14 }]}
+                autoFocus
+              />
+            )}
           </View>
         </View>
 
         <View style={styles.perPersonBox}>
           <Text style={{ fontSize: 13, fontWeight: "600", color: t.roseInk }}>
-            1개당 가격
+            1{qtyUnit}당 가격
           </Text>
           <Text style={{ fontSize: 20, fontWeight: "800", color: t.rose }}>
             {perUnit}
@@ -197,13 +256,13 @@ export function CreateScreen({
                   paddingVertical: 10,
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: pickupUndecided ? t.rose : t.border,
+                  borderColor: t.border,
                   borderRadius: 10,
                 },
               ]}
             >
               <Text
-                style={{ fontSize: 14, color: pickupUndecided ? t.muted : pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
+                style={{ fontSize: 14, color: pickupUndecided ? t.ink : pickupPlace ? t.ink : !locationAvailable ? t.rose : t.dim }}
                 numberOfLines={1}
               >
                 {pickupUndecided
@@ -301,30 +360,37 @@ export function CreateScreen({
                 },
               ]}
             >
-              <Text style={{ fontSize: 14, color: timeDate ? t.ink : t.dim }}>
-                {timeDate ? formatPickupTime(timeDate) : "시간 미정"}
+              <Text style={{ fontSize: 14, color: timeDate || timeUndecided ? t.ink : t.dim }}>
+                {timeUndecided ? "시간 미정" : timeDate ? formatPickupTime(timeDate) : "시간을 선택하세요"}
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => timeDate !== null ? onTimeDate(null) : openTimePicker()}
+              onPress={() => {
+                if (timeUndecided) {
+                  onTimeUndecided(false);
+                } else {
+                  onTimeUndecided(true);
+                  onTimeDate(null);
+                }
+              }}
               style={{
                 height: 46,
                 paddingHorizontal: 14,
                 borderRadius: 10,
                 borderWidth: 1,
-                borderColor: timeDate === null ? t.rose : t.border,
-                backgroundColor: timeDate === null ? t.roseSoft : "#fff",
+                borderColor: timeUndecided ? t.rose : t.border,
+                backgroundColor: timeUndecided ? t.roseSoft : "#fff",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Text style={{ fontSize: 13, fontWeight: "600", color: timeDate === null ? t.rose : t.dim }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: timeUndecided ? t.rose : t.dim }}>
                 미정
               </Text>
             </Pressable>
           </View>
 
-          {timeDate === null && (
+          {timeUndecided && (
             <Text style={{ fontSize: 12, color: t.muted, marginTop: 6 }}>
               픽업 시간은 채팅방에서 참여자들과 함께 정할 수 있어요
             </Text>
@@ -334,7 +400,7 @@ export function CreateScreen({
         <View>
           <Text style={styles.fieldLabel}>소분 방법</Text>
           <TextInput
-            placeholder="예) 1인 4개씩 나눠가져요"
+            placeholder="예) 지퍼백에 나눠 담아드려요"
             placeholderTextColor={t.dim}
             style={styles.createInput}
           />
@@ -343,8 +409,9 @@ export function CreateScreen({
 
       <View style={styles.stickyFooter}>
         <Pressable
-          style={[styles.footerButton, { backgroundColor: t.pink }]}
-          onPress={onPost}
+          style={[styles.footerButton, { backgroundColor: canPost ? t.pink : t.border }]}
+          onPress={canPost ? onPost : undefined}
+          disabled={!canPost}
         >
           <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
             공구 게시하기
@@ -365,7 +432,7 @@ export function CreateScreen({
       <DateTimePickerModal
         visible={showPicker}
         value={pickerBase}
-        onConfirm={(date) => { onTimeDate(date); setShowPicker(false); }}
+        onConfirm={(date) => { onTimeDate(date); onTimeUndecided(false); setShowPicker(false); }}
         onCancel={() => setShowPicker(false)}
       />
     </View>

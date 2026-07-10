@@ -198,13 +198,15 @@ export function AppShell() {
 
   const [extraMsgs, setExtraMsgs] = useState<ChatMsg[]>([]);
   const [homeFilter, setHomeFilter] = useState("전체");
-  const [createCat, setCreateCat] = useState("식품");
+  const [createCat, setCreateCat] = useState("");
   const [cTitle, setCTitle] = useState("");
   const [cTotal, setCTotal] = useState("");
-  const [cQty, setCQty] = useState("10");
+  const [cQty, setCQty] = useState("");
+  const [cQtyUnit, setCQtyUnit] = useState("개");
   const [cPickupPlace, setCPickupPlace] = useState<PickupPlace | null>(null);
   const [cPickupUndecided, setCPickupUndecided] = useState(false);
   const [cTimeDate, setCTimeDate] = useState<Date | null>(null);
+  const [cTimeUndecided, setCTimeUndecided] = useState(false);
   const [ratings, setRatings] = useState<Record<ReviewKey, number>>({
     time: 0,
     fair: 0,
@@ -876,8 +878,9 @@ export function AppShell() {
       category: createCat,
       totalPrice: Number(cTotal) || 0,
       totalQuantity: Number(cQty) || 1,
+      qtyUnit: cQtyUnit,
       pickupPlaceName: cPickupUndecided ? "장소 미정" : (cPickupPlace?.name ?? "장소 미정"),
-      pickupExpectedTime: cTimeDate ? formatPickupTime(cTimeDate) : "시간 미정",
+      pickupExpectedTime: cTimeUndecided ? "시간 미정" : formatPickupTime(cTimeDate!),
       splitMethod: "수량 기준 비례 분담",
       recruitmentDeadline: DEFAULT_RECRUITMENT_DEADLINE_LABEL,
       ...(cPickupUndecided ? {} : cPickupPlace
@@ -908,11 +911,14 @@ export function AppShell() {
     }
 
     setCTitle("");
+    setCreateCat("");
     setCTotal("");
-    setCQty("10");
+    setCQty("");
+    setCQtyUnit("개");
     setCPickupPlace(null);
     setCPickupUndecided(false);
     setCTimeDate(null);
+    setCTimeUndecided(false);
     go("home", "home");
     showToast("공구가 게시됐어요! 🎉");
   }
@@ -1279,14 +1285,18 @@ export function AppShell() {
                 onTitle={setCTitle}
                 total={cTotal}
                 qty={cQty}
+                qtyUnit={cQtyUnit}
                 onTotal={setCTotal}
                 onQty={setCQty}
+                onQtyUnit={setCQtyUnit}
                 pickupPlace={cPickupPlace}
                 pickupUndecided={cPickupUndecided}
                 onPickupPlace={(place) => { setCPickupPlace(place); setCPickupUndecided(false); }}
                 onPickupUndecided={setCPickupUndecided}
                 timeDate={cTimeDate}
                 onTimeDate={setCTimeDate}
+                timeUndecided={cTimeUndecided}
+                onTimeUndecided={setCTimeUndecided}
                 initialCenter={verifiedLocation
                   ? { lat: verifiedLocation.latitude, lng: verifiedLocation.longitude }
                   : undefined}

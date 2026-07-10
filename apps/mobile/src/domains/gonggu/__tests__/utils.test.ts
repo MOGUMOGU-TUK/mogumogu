@@ -14,6 +14,7 @@ function deal(overrides: Partial<Deal>): Deal {
     total: 30_000,
     cur: 0,
     max: 10,
+    qtyUnit: "개",
     members: 0,
     dist: "근처",
     deadline: "내일",
@@ -50,6 +51,10 @@ describe("remain", () => {
 
   it("초과 확보돼도 음수로 내려가지 않는다", () => {
     expect(remain(deal({ cur: 12, max: 10 }))).toBe("앞으로 0개");
+  });
+
+  it("단위가 개가 아니면 해당 단위로 표시한다", () => {
+    expect(remain(deal({ cur: 200, max: 500, qtyUnit: "g" }))).toBe("앞으로 300g");
   });
 });
 

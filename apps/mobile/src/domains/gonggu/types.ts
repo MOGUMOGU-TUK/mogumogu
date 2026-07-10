@@ -16,6 +16,8 @@ export type Deal = {
   cur: number;
   /** 총 수량 */
   max: number;
+  /** 수량 단위 (개, g, kg, mL, L) */
+  qtyUnit: string;
   /** 참여한 사람 수 (참고용) */
   members: number;
   dist: string;
@@ -37,4 +39,4 @@ export type Deal = {
 };
 
 export const HOME_FILTERS = ["전체", "식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
-export const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠"];
+export const CREATE_CATS = ["식품", "생활", "패션", "반려동물", "가구·인테리어", "스포츠", "기타"];
