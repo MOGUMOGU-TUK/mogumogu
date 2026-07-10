@@ -25,6 +25,7 @@ import {
   type VerifiedLocation
 } from "../domains/location/services/verifyNeighborhood";
 import { sendMessageDoc } from "../domains/chat/services/chatRepository";
+import { toggleHeart } from "../domains/gonggu/services/heartRepository";
 import {
   loadUserStatsDoc,
   submitReportDoc,
@@ -71,6 +72,7 @@ import {
 } from "../domains/chat/components/ReportSheet";
 import { MapScreen } from "../domains/map/components/MapScreen";
 import { CompletedDealsScreen } from "../domains/mypage/components/CompletedDealsScreen";
+import { LikedDealsScreen } from "../domains/mypage/components/LikedDealsScreen";
 import {
   MyPageScreen,
   type MyPageReviewTag,
@@ -177,7 +179,6 @@ export function AppShell() {
   const [detailFrom, setDetailFrom] = useState<Screen>("home");
   const [mapSel, setMapSel] = useState("");
   const [joined, setJoined] = useState<string[]>([]);
-  const [hearts, setHearts] = useState<string[]>([]);
   const [showJoin, setShowJoin] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -221,6 +222,7 @@ export function AppShell() {
   /* ── Firebase 훅 ── */
   const auth = useFirebaseAuth();
   const data = useFirestoreData(auth.user?.uid ?? null);
+  const hearts = data.heartedGongguIds;
 
   useEffect(() => {
     const uid = auth.user?.uid;
@@ -345,22 +347,17 @@ export function AppShell() {
 
   /* selectedId는 완료/후기 화면에서도 쓰이므로 전체 거래 기준으로 보정한다. */
   useEffect(() => {
-    if (deals.length === 0) {
-      if (selectedId) setSelectedId("");
-    } else if (!selectedId || !deals.some((d) => d.id === selectedId)) {
-      setSelectedId((feedDeals[0] ?? deals[0])!.id);
-    }
-
-    if (feedDeals.length === 0) {
-      if (mapSel) setMapSel("");
-      return;
-    }
-
-    const fallbackId = feedDeals[0]!.id;
-    if (!mapSel || !feedDeals.some((d) => d.id === mapSel)) {
-      setMapSel(fallbackId);
-    }
-  }, [deals, feedDeals, selectedId, mapSel]);
+    setSelectedId((prev) => {
+      if (deals.length === 0) return prev ? "" : prev;
+      if (!prev || !deals.some((d) => d.id === prev)) return (feedDeals[0] ?? deals[0])!.id;
+      return prev;
+    });
+    setMapSel((prev) => {
+      if (feedDeals.length === 0) return prev ? "" : prev;
+      if (!prev || !feedDeals.some((d) => d.id === prev)) return feedDeals[0]!.id;
+      return prev;
+    });
+  }, [deals, feedDeals]);
 
   /*
    * 로그인 세션 복원 후 라우팅.
@@ -414,7 +411,7 @@ export function AppShell() {
     void reverseGeocode(verifiedLocation.latitude, verifiedLocation.longitude)
       .then((address) => setCPickupPlace({ ...fallback, address }))
       .catch(() => setCPickupPlace(fallback));
-  }, [screen, verifiedLocation]);
+  }, [screen, verifiedLocation, cPickupPlace]);
 
   /* 현재 사용자 (도메인 타입) */
   const currentUser = useMemo<User>(
@@ -643,7 +640,7 @@ export function AppShell() {
         go("home", "home");
         return true;
       }
-      if (screen === "completedDeals" || screen === "receivedReviews" || screen === "noshowDeals") {
+      if (screen === "completedDeals" || screen === "receivedReviews" || screen === "noshowDeals" || screen === "likedDeals") {
         go("mypage", "mypage");
         return true;
       }
@@ -1230,13 +1227,7 @@ export function AppShell() {
                     go(tab);
                   }
                 }}
-                onHeart={() =>
-                  setHearts((prev) =>
-                    prev.includes(sel.id)
-                      ? prev.filter((x) => x !== sel.id)
-                      : [...prev, sel.id],
-                  )
-                }
+                onHeart={() => void toggleHeart(currentUser.id, sel.id, hearts.includes(sel.id))}
                 onDelete={() => deletePost(sel)}
                 onCta={() => {
                   if (joined.includes(sel.id)) openRoom(sel.id);
@@ -1327,6 +1318,7 @@ export function AppShell() {
                 completedDealCount={myPageStats.completedDealCount}
                 receivedReviewCount={myPageStats.receivedReviewCount}
                 noshowCount={myPageStats.noshowCount}
+                likedDealCount={hearts.length}
                 reviewTags={myPageStats.reviewTags}
                 notif={notif}
                 onToggle={toggleNotif}
@@ -1334,7 +1326,20 @@ export function AppShell() {
                 onOpenCompletedDeals={() => openCompletedDeals("view")}
                 onOpenReceivedReviews={openReceivedReviews}
                 onOpenNoshowDeals={openNoshowDeals}
+                onOpenLikedDeals={() => setScreen("likedDeals")}
                 onReviewDemo={() => openCompletedDeals("review")}
+              />
+            )}
+
+            {screen === "likedDeals" && (
+              <LikedDealsScreen
+                deals={deals.filter((d) => hearts.includes(d.id))}
+                onBack={() => go("mypage", "mypage")}
+                onOpen={(deal) => {
+                  setSelectedId(deal.id);
+                  setDetailFrom("mypage");
+                  setScreen("detail");
+                }}
               />
             )}
 

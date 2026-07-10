@@ -27,6 +27,7 @@ export function MyPageScreen({
   completedDealCount,
   receivedReviewCount,
   noshowCount,
+  likedDealCount,
   reviewTags,
   notif,
   onToggle,
@@ -34,6 +35,7 @@ export function MyPageScreen({
   onOpenCompletedDeals,
   onOpenReceivedReviews,
   onOpenNoshowDeals,
+  onOpenLikedDeals,
   onReviewDemo,
 }: {
   nickname: string;
@@ -47,9 +49,11 @@ export function MyPageScreen({
   notif: Record<NotifKey, boolean>;
   onToggle: (key: NotifKey) => void;
   onEditProfile: () => void;
+  likedDealCount: number;
   onOpenCompletedDeals: () => void;
   onOpenReceivedReviews: () => void;
   onOpenNoshowDeals: () => void;
+  onOpenLikedDeals: () => void;
   onReviewDemo: () => void;
 }) {
   const manner = getMannerLevel(mannerScore);
@@ -123,6 +127,11 @@ export function MyPageScreen({
       </View>
 
       <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+        <StatCard
+          value={String(likedDealCount)}
+          label="찜한 공구"
+          onPress={onOpenLikedDeals}
+        />
         <StatCard
           value={String(completedDealCount)}
           label="거래 완료"

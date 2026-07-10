@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 
 import { isFirebaseConfigured } from "../../../services/firebase/client";
 import { subscribeGonggus } from "../services/gongguRepository";
+import { subscribeHearts } from "../services/heartRepository";
 import {
   subscribeParticipations,
   subscribeReviews,
-  subscribeSettlements
+  subscribeSettlements,
 } from "../services/participationRepository";
 import { seedSnapshot } from "../../../services/mock/seed";
 import type { Gonggu, Participation, Review, Settlement } from "../../../types/domain";
@@ -17,6 +18,7 @@ export type FirestoreData = {
   participations: Participation[];
   settlements: Settlement[];
   reviews: Review[];
+  heartedGongguIds: string[];
   source: GongguSource;
 };
 
@@ -35,6 +37,7 @@ export function useFirestoreData(authUid?: string | null): FirestoreData {
   const [participations, setParticipations] = useState<Participation[]>(seedSnapshot.participations);
   const [settlements, setSettlements] = useState<Settlement[]>(seedSnapshot.settlements);
   const [reviews, setReviews] = useState<Review[]>(seedSnapshot.reviews);
+  const [heartedGongguIds, setHeartedGongguIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!configured) {
@@ -60,7 +63,8 @@ export function useFirestoreData(authUid?: string | null): FirestoreData {
       ),
       subscribeParticipations(setParticipations),
       subscribeSettlements(setSettlements),
-      subscribeReviews(setReviews)
+      subscribeReviews(setReviews),
+      subscribeHearts(authUid, setHeartedGongguIds),
     ];
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -72,6 +76,7 @@ export function useFirestoreData(authUid?: string | null): FirestoreData {
       participations: seedSnapshot.participations,
       settlements: seedSnapshot.settlements,
       reviews: seedSnapshot.reviews,
+      heartedGongguIds: [],
       source: "seed",
     };
   }
@@ -82,9 +87,10 @@ export function useFirestoreData(authUid?: string | null): FirestoreData {
       participations: [],
       settlements: [],
       reviews: [],
+      heartedGongguIds: [],
       source: "loading",
     };
   }
 
-  return { gonggus, participations, settlements, reviews, source };
+  return { gonggus, participations, settlements, reviews, heartedGongguIds, source };
 }

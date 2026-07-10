@@ -97,6 +97,13 @@ service cloud.firestore {
       }
     }
 
+    match /hearts/{heartId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow delete: if isOwner(resource.data.userId);
+      allow update: if false;
+    }
+
     match /reports/{reportId} {
       allow create: if signedIn();
       allow read, update, delete: if false;

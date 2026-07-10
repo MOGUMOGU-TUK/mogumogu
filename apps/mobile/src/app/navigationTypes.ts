@@ -13,6 +13,7 @@ export type Screen =
   | "completedDeals"
   | "receivedReviews"
   | "noshowDeals"
-  | "notifications";
+  | "notifications"
+  | "likedDeals";
 
 export type MainTab = "home" | "map" | "chat" | "mypage";
