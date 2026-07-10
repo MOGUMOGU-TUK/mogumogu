@@ -99,7 +99,13 @@ export const styles = StyleSheet.create({
   },
   locButton: { flexDirection: "row", alignItems: "center", gap: 5 },
   locText: { fontSize: 19, fontWeight: "800", color: t.ink },
-  chevron: { fontSize: 18, color: t.ink, fontWeight: "700" },
+  chevron: {
+    fontSize: 18,
+    color: t.ink,
+    fontWeight: "700",
+    lineHeight: 18,
+    transform: [{ translateY: -5 }],
+  },
   headerIcon: { fontSize: 20 },
   bellDot: {
     position: "absolute",
