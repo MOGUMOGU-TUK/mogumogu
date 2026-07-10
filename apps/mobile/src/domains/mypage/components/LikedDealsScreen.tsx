@@ -26,8 +26,8 @@ export function LikedDealsScreen({
 
       {deals.length === 0 ? (
         <EmptyState
-          emoji="♥"
-          emojiColor={t.rose}
+          emoji={"♥︎"}
+          emojiColor={t.pink}
           title="찜한 공구가 없어요"
           desc="마음에 드는 공구에 하트를 눌러보세요"
         />
